@@ -36,6 +36,7 @@ class GeneratorLoss(nn.Module):
         
         if opt.dis_perceptual_loss and opt.adversarial_loss:
             coverage, coverage0, coverage1, coverage2, coverage3, coverage4, coverage5, coverage6, coverage7 = 1, 1, 1, 1, 1, 1, 1, 1, 1
+            softmax_loss0, softmax_loss1, softmax_loss2, softmax_loss3, softmax_loss4, softmax_loss5, softmax_loss6, softmax_loss7 = 1, 1, 1, 1, 1, 1, 1, 1
 
             target_1, target_2, target_3, target_4, target_5, target_6, target_7 = self.dis_network(target_images)[:-1]
 
@@ -50,20 +51,32 @@ class GeneratorLoss(nn.Module):
             loss6 = self.mse_loss(target_6, out_6)
             loss7 = self.mse_loss(target_7, out_7)
 
-            sum_exp_loss = torch.exp(loss0) + torch.exp(loss1) + torch.exp(loss2) + torch.exp(loss3) + torch.exp(loss4) + torch.exp(loss5) + torch.exp(loss6) + torch.exp(loss7)
+            if opt.softmax_loss:
+                sum_exp_loss = torch.exp(loss0) + torch.exp(loss1) + torch.exp(loss2) + torch.exp(loss3) + torch.exp(loss4) + torch.exp(loss5) + torch.exp(loss6) + torch.exp(loss7)
 
-            softmax_loss0 = torch.exp(loss0)/sum_exp_loss
-            softmax_loss1 = torch.exp(loss1)/sum_exp_loss
-            softmax_loss2 = torch.exp(loss2)/sum_exp_loss
-            softmax_loss3 = torch.exp(loss3)/sum_exp_loss
-            softmax_loss4 = torch.exp(loss4)/sum_exp_loss
-            softmax_loss5 = torch.exp(loss5)/sum_exp_loss
-            softmax_loss6 = torch.exp(loss6)/sum_exp_loss
-            softmax_loss7 = torch.exp(loss7)/sum_exp_loss
+                softmax_loss0 = torch.exp(loss0)/sum_exp_loss
+                softmax_loss1 = torch.exp(loss1)/sum_exp_loss
+                softmax_loss2 = torch.exp(loss2)/sum_exp_loss
+                softmax_loss3 = torch.exp(loss3)/sum_exp_loss
+                softmax_loss4 = torch.exp(loss4)/sum_exp_loss
+                softmax_loss5 = torch.exp(loss5)/sum_exp_loss
+                softmax_loss6 = torch.exp(loss6)/sum_exp_loss
+                softmax_loss7 = torch.exp(loss7)/sum_exp_loss
+
+                self.writer.add_scalar("Dis Perceptual Softmax Loss-0", softmax_loss0, self.steps)
+                self.writer.add_scalar("Dis Perceptual Softmax Loss-1", softmax_loss1, self.steps)
+                self.writer.add_scalar("Dis Perceptual Softmax Loss-2", softmax_loss2, self.steps)
+                self.writer.add_scalar("Dis Perceptual Softmax Loss-3", softmax_loss3, self.steps)
+                self.writer.add_scalar("Dis Perceptual Softmax Loss-4", softmax_loss4, self.steps)
+                self.writer.add_scalar("Dis Perceptual Softmax Loss-5", softmax_loss5, self.steps)
+                self.writer.add_scalar("Dis Perceptual Softmax Loss-6", softmax_loss6, self.steps)
+                self.writer.add_scalar("Dis Perceptual Softmax Loss-7", softmax_loss7, self.steps)
+
+                self.writer.add_scalar("Dis Sum Softmax Loss", sum_exp_loss, self.steps)
 
             if opt.coverage:
                 coverage0 = 0.9 * coverage + 0.1 * softmax_loss0
-                coverage1 = 0.9 * coverage + 0.1 * softmax_loss1    
+                coverage1 = 0.9 * coverage + 0.1 * softmax_loss1
                 coverage2 = 0.9 * coverage + 0.1 * softmax_loss2
                 coverage3 = 0.9 * coverage + 0.1 * softmax_loss3
                 coverage4 = 0.9 * coverage + 0.1 * softmax_loss4
@@ -83,38 +96,29 @@ class GeneratorLoss(nn.Module):
             dis_perception_loss = (loss0 * softmax_loss0/coverage0) + (loss1 * softmax_loss1/coverage1) + (loss2 * softmax_loss2/coverage2) + (loss3 * softmax_loss3/coverage3) + (loss4 * softmax_loss4/coverage4) + (loss5 * softmax_loss5/coverage5) + (loss6 * softmax_loss6/coverage6) + (loss7 * softmax_loss7/coverage7)
 
             self.writer.add_scalar("Dis Perceptual Loss-0", loss0, self.steps)
-            self.writer.add_scalar("Dis Perceptual Softmax Loss-0", softmax_loss0, self.steps)
             self.writer.add_scalar("Dis Perceptual Adj Loss-0", (loss0 * softmax_loss0/coverage0), self.steps)
 
             self.writer.add_scalar("Dis Perceptual Loss-1", loss1, self.steps)
-            self.writer.add_scalar("Dis Perceptual Softmax Loss-1", softmax_loss1, self.steps)
             self.writer.add_scalar("Dis Perceptual Adj Loss-1", (loss1 * softmax_loss1/coverage1), self.steps)
 
             self.writer.add_scalar("Dis Perceptual Loss-2", loss2, self.steps)
-            self.writer.add_scalar("Dis Perceptual Softmax Loss-2", softmax_loss2, self.steps)
             self.writer.add_scalar("Dis Perceptual Adj Loss-2", (loss2 * softmax_loss2/coverage2), self.steps)
 
             self.writer.add_scalar("Dis Perceptual Loss-3", loss3, self.steps)
-            self.writer.add_scalar("Dis Perceptual Softmax Loss-3", softmax_loss3, self.steps)
             self.writer.add_scalar("Dis Perceptual Adj Loss-3", (loss3 * softmax_loss3/coverage3), self.steps)
             
             self.writer.add_scalar("Dis Perceptual Loss-4", loss4, self.steps)
-            self.writer.add_scalar("Dis Perceptual Softmax Loss-4", softmax_loss4, self.steps)
             self.writer.add_scalar("Dis Perceptual Adj Loss-4", (loss4 * softmax_loss4/coverage4), self.steps)
 
             self.writer.add_scalar("Dis Perceptual Loss-5", loss5, self.steps)
-            self.writer.add_scalar("Dis Perceptual Softmax Loss-5", softmax_loss5, self.steps)
             self.writer.add_scalar("Dis Perceptual Adj Loss-5", (loss5 * softmax_loss5/coverage5), self.steps)
 
             self.writer.add_scalar("Dis Perceptual Loss-6", loss6, self.steps)
-            self.writer.add_scalar("Dis Perceptual Softmax Loss-6", softmax_loss6, self.steps)
             self.writer.add_scalar("Dis Perceptual Adj Loss-6", (loss6 * softmax_loss6/coverage6), self.steps)
 
             self.writer.add_scalar("Dis Perceptual Loss-7", loss7, self.steps)
-            self.writer.add_scalar("Dis Perceptual Softmax Loss-7", softmax_loss7, self.steps)
             self.writer.add_scalar("Dis Perceptual Adj Loss-7", (loss7 * softmax_loss7/coverage7), self.steps)
 
-            self.writer.add_scalar("Dis Sum Softmax Loss", sum_exp_loss, self.steps)
             self.writer.add_scalar("Dis Perceptual Loss", dis_perception_loss, self.steps)
             
             # print("Perception Loss: {}".format(perception_loss.item()))
@@ -154,7 +158,10 @@ class GeneratorLoss(nn.Module):
         elif opt.dis_perceptual_loss and opt.adversarial_loss and not opt.vgg_loss:
             if opt.losstype_print_tracker:
                 print("+"*30)
-                print("IMAGE LOSS + ADVERSARIAL LOSS + DIS PERCEPTUAL LOSS - NO COVERAGE")
+                if opt.softmax_loss:
+                    print("IMAGE LOSS + ADVERSARIAL LOSS + DIS PERCEPTUAL LOSS - NO COVERAGE SOFTMAX LOSS")
+                else:
+                    print("IMAGE LOSS + ADVERSARIAL LOSS + DIS PERCEPTUAL LOSS - NO COVERAGE")
                 print("+"*30)
                 opt.losstype_print_tracker = False
             return image_loss + adversarial_loss + dis_perception_loss

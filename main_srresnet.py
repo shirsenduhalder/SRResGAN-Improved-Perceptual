@@ -36,7 +36,10 @@ parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)"
 parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perceptual loss from discriminator?")
 parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
 parser.add_argument("--coverage", action="store_true", help="Use coverage?")
+parser.add_argument("--softmax_loss", action="store_true", help="Use softmax normalized loss for discriminator perceptual loss?")
 parser.add_argument("--sample_dir", default="outputs/samples/", help="Path to save traiing samples")
+parser.add_argument("--logs_dir", default="outputs/logs/", help="Path to save logs")
+parser.add_argument("--checkpoint_dir", default="outputs/checkpoint/", help="Path to save checkpoint")
 
 def main():
 
@@ -47,14 +50,21 @@ def main():
 
     opt = parser.parse_args()
     print(opt)
-    writer = SummaryWriter(logdir="outputs/logs/"+'PerLoss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.adversarial_loss)+\
-                                ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/', comment="-srgan-")
+    
+    if opt.dis_perceptual_loss:
+        assert opt.adversarial_loss, "Discriminator perceptual loss is invalid without adversarial loss"
+    
+    if opt.softmax_loss:
+        assert opt.dis_perceptual_loss, "Softmax normalization is only valid for Discriminator Perceptual loss"
 
-    opt.sample_dir = opt.sample_dir + 'PerLoss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.adversarial_loss)+\
-                                ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/'
 
-    opt.checkpoint_file = "outputs/checkpoint/" + 'PerLoss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.adversarial_loss)+\
-                    ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/'
+    out_folder = "Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})".format(opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage)
+
+    writer = SummaryWriter(logdir = os.path.join(opt.logs_dir, out_folder), comment="-srgan-")
+
+    opt.sample_dir = os.path.join(opt.sample_dir, out_folder)
+
+    opt.checkpoint_file = os.path.join(opt.checkpoint_dir, out_folder)
 
 
     cuda = opt.cuda
@@ -232,7 +242,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         if opt.adversarial_loss:            
             writer.add_scalar("Loss_D", loss_d.item(), STEPS)
 
-        if iteration%1 == 1000:
+        if iteration%1000 == 0:
             # if opt.vgg_loss:
             #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
             # else:
@@ -243,7 +253,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
             
             utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
 
-        if iteration%1 == 100:
+        if iteration%100 == 0:
             if opt.adversarial_loss:
                 print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item()))
             else:

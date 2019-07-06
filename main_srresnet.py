@@ -232,7 +232,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         if opt.adversarial_loss:            
             writer.add_scalar("Loss_D", loss_d.item(), STEPS)
 
-        if iteration%1 == 0:
+        if iteration%1 == 1000:
             # if opt.vgg_loss:
             #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
             # else:
@@ -243,7 +243,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
             
             utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
 
-        if iteration%1 == 0:
+        if iteration%1 == 100:
             if opt.adversarial_loss:
                 print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item()))
             else:

@@ -34,7 +34,7 @@ parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
 parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
 #changed
 parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perceptual loss from discriminator?")
-parser.add_argument("--gen_adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
+parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
 parser.add_argument("--coverage", action="store_true", help="Use coverage?")
 parser.add_argument("--sample_dir", default="outputs/samples/", help="Path to save traiing samples")
 
@@ -47,13 +47,13 @@ def main():
 
     opt = parser.parse_args()
     print(opt)
-    writer = SummaryWriter(logdir="outputs/logs/"+'Ploss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.gen_adversarial_loss)+\
+    writer = SummaryWriter(logdir="outputs/logs/"+'PerLoss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.adversarial_loss)+\
                                 ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/', comment="-srgan-")
 
-    opt.sample_dir = opt.sample_dir + 'Ploss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.gen_adversarial_loss)+\
+    opt.sample_dir = opt.sample_dir + 'PerLoss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.adversarial_loss)+\
                                 ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/'
 
-    opt.checkpoint_file = "outputs/checkpoint/" + 'Ploss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.gen_adversarial_loss)+\
+    opt.checkpoint_file = "outputs/checkpoint/" + 'PerLoss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.adversarial_loss)+\
                     ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/'
 
 
@@ -101,19 +101,27 @@ def main():
     model_G = _NetG()
     
     #changed
-    model_D = _NetD()
+    if opt.adversarial_loss:
+        model_D = _NetD()
+        criterion_D = nn.BCELoss()
+    else:
+        model_D = None
+        criterion_D = None
+
     criterion_G = GeneratorLoss(netContent, model_D, writer, STEPS)
-    criterion_D = nn.BCELoss()
 
     print("===> Setting GPU")
     if cuda:
         #changed
         model_G = model_G.cuda()
-        model_D = model_D.cuda()
+
+        if opt.adversarial_loss:    
+            model_D = model_D.cuda()
+            criterion_D = criterion_D.cuda()
+
         criterion_G = criterion_G.cuda()
-        criterion_D = criterion_D.cuda()
         if opt.vgg_loss:
-            netContent = netContent.cuda() 
+            netContent = netContent.cuda()
 
     # optionally resume from a checkpoint
     if opt.resume:
@@ -139,9 +147,15 @@ def main():
     print("===> Setting Optimizer")
     # changed
     optimizer_G = optim.Adam(model_G.parameters(), lr=opt.lr)
-    optimizer_D = optim.Adam(model_D.parameters(), lr=opt.lr)
+
+    if opt.adversarial_loss:       
+        optimizer_D = optim.Adam(model_D.parameters(), lr=opt.lr)
+    else:
+        optimizer_D = None
 
     print("===> Training")
+    #to track loss type
+    opt.losstype_print_tracker = True
     for epoch in range(opt.start_epoch, opt.nEpochs + 1):
         # changed
         train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, criterion_G, criterion_D, epoch, STEPS)
@@ -159,12 +173,15 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
     for param_group in optimizer_G.param_groups:
         param_group["lr"] = lr
     
-    for param_group in optimizer_D.param_groups:
-        param_group["lr"] = lr
+    if opt.adversarial_loss:
+        for param_group in optimizer_D.param_groups:
+            param_group["lr"] = lr
 
     print("Epoch={}, lr={}".format(epoch, optimizer_G.param_groups[0]["lr"]))
     model_G.train()
-    model_D.train()
+
+    if opt.adversarial_loss:
+        model_D.train()
 
     for iteration, batch in enumerate(training_data_loader, 1):
 
@@ -182,12 +199,15 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         target_real = Variable(torch.rand(opt.batchSize)*0.5 + 0.7).cuda()
         target_fake = Variable(torch.rand(opt.batchSize)*0.3).cuda()
 
-        model_D.zero_grad()
-        real_out = model_D(target)[-1]
-        fake_out = model_D(output)[-1]
-        loss_d = criterion_D(real_out, target_real) + criterion_D(fake_out, target_fake)
-        loss_d.backward(retain_graph=True)
-        optimizer_D.step()
+        if opt.adversarial_loss:
+            model_D.zero_grad()
+            real_out = model_D(target)[-1]
+            fake_out = model_D(output)[-1]
+            loss_d = criterion_D(real_out, target_real) + criterion_D(fake_out, target_fake)
+            loss_d.backward(retain_graph=True)
+            optimizer_D.step()
+        else:
+            fake_out = None
 
 
         # if opt.vgg_loss:
@@ -197,7 +217,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         #     content_loss = criterion(content_input, content_target)
 
         optimizer_G.zero_grad()
-        loss_g = criterion_G(opt.gen_adversarial_loss, opt.vgg_loss, opt.dis_perceptual_loss, opt.coverage, fake_out, output, target, opt)
+        loss_g = criterion_G(fake_out, output, target, opt)
 
         # if opt.vgg_loss:
         #     netContent.zero_grad()
@@ -208,9 +228,11 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         optimizer_G.step()
 
         writer.add_scalar("Loss_G", loss_g.item(), STEPS)
-        writer.add_scalar("Loss_D", loss_d.item(), STEPS)
 
-        if iteration%500 == 0:
+        if opt.adversarial_loss:            
+            writer.add_scalar("Loss_D", loss_d.item(), STEPS)
+
+        if iteration%1 == 0:
             # if opt.vgg_loss:
             #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
             # else:
@@ -221,11 +243,11 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
             
             utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
 
-        if iteration%100 = 0:
-            print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item()))
-
-
-
+        if iteration%1 == 0:
+            if opt.adversarial_loss:
+                print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item()))
+            else:
+                print("===> Epoch[{}]({}/{}): Loss: {:.3}".format(epoch, iteration, len(training_data_loader), loss_g.item()))
 
 def save_checkpoint(model, epoch):
     model_out_path = opt.checkpoint_file + "model_epoch_{}.pth".format(epoch)

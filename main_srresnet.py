@@ -199,8 +199,6 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         optimizer_G.zero_grad()
         loss_g = criterion_G(opt.gen_adversarial_loss, opt.vgg_loss, opt.dis_perceptual_loss, opt.coverage, fake_out, output, target, opt)
 
-        print(STEPS)
-
         # if opt.vgg_loss:
         #     netContent.zero_grad()
         #     content_loss.backward(retain_graph=True)
@@ -212,7 +210,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         writer.add_scalar("Loss_G", loss_g.item(), STEPS)
         writer.add_scalar("Loss_D", loss_d.item(), STEPS)
 
-        if iteration%20 == 0:
+        if iteration%500 == 0:
             # if opt.vgg_loss:
             #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
             # else:
@@ -223,6 +221,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
             
             utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
 
+        if iteration%100 = 0:
             print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item()))
 
 

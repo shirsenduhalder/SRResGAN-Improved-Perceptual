@@ -12,7 +12,7 @@ class GeneratorLoss(nn.Module):
         self.mse_loss = nn.MSELoss()
         self.bce_loss = nn.BCELoss()
     
-    def forward(self, gen_adversarial_loss, vgg_loss, dis_perceptual_loss, coverage, out_labels, out_images, target_images, opt):
+    def forward(self, gen_adversarial_loss, vgg_loss, dis_perceptual_loss, use_coverage, out_labels, out_images, target_images, opt):
         self.steps += out_images.shape[0]
         image_loss = self.mse_loss(out_images, target_images)
         self.writer.add_scalar("Image Loss", image_loss, self.steps)
@@ -61,7 +61,7 @@ class GeneratorLoss(nn.Module):
             softmax_loss6 = torch.exp(loss6)/sum_exp_loss
             softmax_loss7 = torch.exp(loss7)/sum_exp_loss
 
-            if coverage:
+            if use_coverage:
                 coverage0 = 0.9 * coverage + 0.1 * softmax_loss0
                 coverage1 = 0.9 * coverage + 0.1 * softmax_loss1    
                 coverage2 = 0.9 * coverage + 0.1 * softmax_loss2

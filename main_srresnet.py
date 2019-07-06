@@ -42,7 +42,7 @@ def main():
     #changed
     # global opt, model, netContent
 
-    global opt, model_G, model_D, netContent, writer
+    global opt, model_G, model_D, netContent, writer, STEPS
 
     writer = SummaryWriter(logdir="logs/", comment="-srgan-")
     opt = parser.parse_args()
@@ -89,7 +89,7 @@ def main():
     
     #changed
     model_D = _NetD()
-    criterion_G = GeneratorLoss(netContent, model_D)
+    criterion_G = GeneratorLoss(netContent, model_D, writer, STEPS)
     criterion_D = nn.BCELoss()
 
     print("===> Setting GPU")
@@ -131,7 +131,7 @@ def main():
     print("===> Training")
     for epoch in range(opt.start_epoch, opt.nEpochs + 1):
         # changed
-        train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, criterion_G, criterion_D, epoch)
+        train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, criterion_G, criterion_D, epoch, STEPS)
         save_checkpoint(model_G, epoch)
 
 def adjust_learning_rate(optimizer, epoch):
@@ -139,7 +139,7 @@ def adjust_learning_rate(optimizer, epoch):
     lr = opt.lr * (0.1 ** (epoch // opt.step))
     return lr 
 
-def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, criterion_G, criterion_D, epoch):
+def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, criterion_G, criterion_D, epoch, STEPS):
 
     lr = adjust_learning_rate(optimizer_G, epoch-1)
     
@@ -152,7 +152,6 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
     print("Epoch={}, lr={}".format(epoch, optimizer_G.param_groups[0]["lr"]))
     model_G.train()
     model_D.train()
-    global STEPS
 
     for iteration, batch in enumerate(training_data_loader, 1):
 
@@ -186,6 +185,8 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
 
         optimizer_G.zero_grad()
         loss_g = criterion_G(opt.gen_adversarial_loss, opt.vgg_loss, opt.dis_perceptual_loss, opt.coverage, fake_out, output, target, opt)
+
+        print(STEPS)
 
         # if opt.vgg_loss:
         #     netContent.zero_grad()

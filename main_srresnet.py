@@ -17,6 +17,7 @@ import numpy as np
 from tensorboardX import SummaryWriter
 
 STEPS = 0
+os.environ["HDF5_USE_FILE_LOCKING"]='FALSE'
 
 # Training settings
 parser = argparse.ArgumentParser(description="PyTorch SRResNet")
@@ -24,7 +25,7 @@ parser.add_argument("--batchSize", type=int, default=16, help="training batch si
 parser.add_argument("--nEpochs", type=int, default=500, help="number of epochs to train for")
 parser.add_argument("--lr", type=float, default=1e-4, help="Learning Rate. Default=1e-4")
 parser.add_argument("--step", type=int, default=200, help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=500")
-parser.add_argument("--cuda", action="store_true", help="Use cuda?")
+parser.add_argument("--cuda", default="true", help="Use cuda?")
 parser.add_argument("--resume", default="", type=str, help="Path to checkpoint (default: none)")
 parser.add_argument("--start-epoch", default=1, type=int, help="Manual epoch number (useful on restarts)")
 parser.add_argument("--threads", type=int, default=0, help="Number of threads for data loader to use, Default: 1")
@@ -35,7 +36,7 @@ parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)"
 parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perceptual loss from discriminator?")
 parser.add_argument("--gen_adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
 parser.add_argument("--coverage", action="store_true", help="Use coverage?")
-parser.add_argument("--sample_dir", default="samples/", help="Path to save traiing samples")
+parser.add_argument("--sample_dir", default="outputs/samples/", help="Path to save traiing samples")
 
 def main():
 
@@ -44,9 +45,17 @@ def main():
 
     global opt, model_G, model_D, netContent, writer, STEPS
 
-    writer = SummaryWriter(logdir="logs/", comment="-srgan-")
     opt = parser.parse_args()
     print(opt)
+    writer = SummaryWriter(logdir="outputs/logs/"+'Ploss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.gen_adversarial_loss)+\
+                                ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/', comment="-srgan-")
+
+    opt.sample_dir = opt.sample_dir + 'Ploss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.gen_adversarial_loss)+\
+                                ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/'
+
+    opt.checkpoint_file = "outputs/checkpoint/" + 'Ploss('+str(opt.dis_perceptual_loss)+')_GANloss('+str(opt.gen_adversarial_loss)+\
+                    ')_VGGloss('+str(opt.vgg_loss)+')_coverage('+str(opt.coverage)+')/'
+
 
     cuda = opt.cuda
     if cuda:
@@ -70,7 +79,11 @@ def main():
 
     print('===> Loading VGG model')
     netVGG = models.vgg19()
-    netVGG.load_state_dict(model_zoo.load_url('https://download.pytorch.org/models/vgg19-dcbb9e9d.pth'))
+    if opt.vgg_loss:
+        if os.path.isfile('data/vgg19-dcbb9e9d.pth'):
+        	netVGG.load_state_dict(torch.load('data/vgg19-dcbb9e9d.pth'))
+        else:
+        	netVGG.load_state_dict(model_zoo.load_url('https://download.pytorch.org/models/vgg19-dcbb9e9d.pth'))
     class _content_model(nn.Module):
         def __init__(self):
             super(_content_model, self).__init__()
@@ -199,7 +212,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         writer.add_scalar("Loss_G", loss_g.item(), STEPS)
         writer.add_scalar("Loss_D", loss_d.item(), STEPS)
 
-        if iteration%1000 == 0:
+        if iteration%20 == 0:
             # if opt.vgg_loss:
             #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
             # else:
@@ -210,17 +223,16 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
             
             utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
 
-        if iteration % 100 == 0:
             print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item()))
 
 
 
 
 def save_checkpoint(model, epoch):
-    model_out_path = "checkpoint/" + "model_epoch_{}.pth".format(epoch)
+    model_out_path = opt.checkpoint_file + "model_epoch_{}.pth".format(epoch)
     state = {"epoch": epoch ,"model": model}
-    if not os.path.exists("checkpoint/"):
-        os.makedirs("checkpoint/")
+    if not os.path.exists(opt.checkpoint_file):
+        os.makedirs(opt.checkpoint_file)
 
     torch.save(state, model_out_path)
 

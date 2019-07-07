@@ -260,7 +260,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
                 print("===> Epoch[{}]({}/{}): Loss: {:.3}".format(epoch, iteration, len(training_data_loader), loss_g.item()))
 
 def save_checkpoint(model, epoch):
-    model_out_path = opt.checkpoint_file + "model_epoch_{}.pth".format(epoch)
+    model_out_path = os.path.join(opt.checkpoint_file,  "model_epoch_{}.pth".format(epoch))
     state = {"epoch": epoch ,"model": model}
     if not os.path.exists(opt.checkpoint_file):
         os.makedirs(opt.checkpoint_file)

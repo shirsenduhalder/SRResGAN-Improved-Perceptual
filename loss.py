@@ -11,11 +11,10 @@ class GeneratorLoss(nn.Module):
         self.steps = steps
         self.mse_loss = nn.MSELoss()
         self.bce_loss = nn.BCELoss()
+        self.huber_loss = nn.SmoothL1Loss()
     
     def forward(self, out_labels, out_images, target_images, opt):
         self.steps += out_images.shape[0]
-        image_loss = self.mse_loss(out_images, target_images)
-        self.writer.add_scalar("Image Loss", image_loss, self.steps)
         # print("Image loss: {}".format(image_loss.item()))
 
         self.ones_const = Variable(torch.ones(opt.batchSize))
@@ -23,6 +22,14 @@ class GeneratorLoss(nn.Module):
             self.ones_const = self.ones_const.cuda()
             self.mse_loss = self.mse_loss.cuda()
             self.bce_loss = self.bce_loss.cuda()
+            self.huber_loss = self.huber_loss.cuda()
+
+        self.hybrid_l2_l1_loss = self.mse_loss
+        if opt.huber_loss:
+        	self.hybrid_l2_l1_loss = self.huber_loss
+
+        image_loss = self.mse_loss(out_images, target_images)
+        self.writer.add_scalar("Image Loss", image_loss, self.steps)
 
         if opt.adversarial_loss:   
             adversarial_loss = self.bce_loss(out_labels, self.ones_const)
@@ -42,14 +49,14 @@ class GeneratorLoss(nn.Module):
 
             out_1, out_2, out_3, out_4, out_5, out_6, out_7 = self.dis_network(out_images)[:-1]
 
-            loss0 = self.mse_loss(target_images, out_images)
-            loss1 = self.mse_loss(target_1, out_1)
-            loss2 = self.mse_loss(target_2, out_2)
-            loss3 = self.mse_loss(target_3, out_3)
-            loss4 = self.mse_loss(target_4, out_4)
-            loss5 = self.mse_loss(target_5, out_5)
-            loss6 = self.mse_loss(target_6, out_6)
-            loss7 = self.mse_loss(target_7, out_7)
+            loss0 = self.hybrid_l2_l1_loss(target_images, out_images)
+            loss1 = self.hybrid_l2_l1_loss(target_1, out_1)
+            loss2 = self.hybrid_l2_l1_loss(target_2, out_2)
+            loss3 = self.hybrid_l2_l1_loss(target_3, out_3)
+            loss4 = self.hybrid_l2_l1_loss(target_4, out_4)
+            loss5 = self.hybrid_l2_l1_loss(target_5, out_5)
+            loss6 = self.hybrid_l2_l1_loss(target_6, out_6)
+            loss7 = self.hybrid_l2_l1_loss(target_7, out_7)
 
             if opt.softmax_loss:
                 sum_exp_loss = torch.exp(loss0) + torch.exp(loss1) + torch.exp(loss2) + torch.exp(loss3) + torch.exp(loss4) + torch.exp(loss5) + torch.exp(loss6) + torch.exp(loss7)
@@ -129,7 +136,7 @@ class GeneratorLoss(nn.Module):
                 print("IMAGE LOSS + ADVERSARIAL LOSS")
                 print("+"*30)
                 opt.losstype_print_tracker = False
-            return image_loss + adversarial_loss
+            return image_loss + opt.adversarial_loss_coefficient*adversarial_loss
         
         elif opt.adversarial_loss and opt.vgg_loss and not opt.dis_perceptual_loss:
             if opt.losstype_print_tracker:
@@ -137,7 +144,7 @@ class GeneratorLoss(nn.Module):
                 print("IMAGE LOSS + ADVERSARIAL LOSS + VGG LOSS")
                 print("+"*30)
                 opt.losstype_print_tracker = False
-            return image_loss + adversarial_loss + vgg_perception_loss
+            return image_loss + opt.adversarial_loss_coefficient*adversarial_loss + opt.vgg_loss_coefficient*vgg_perception_loss
         
         elif not opt.adversarial_loss and opt.vgg_loss:
             if opt.losstype_print_tracker:
@@ -145,7 +152,7 @@ class GeneratorLoss(nn.Module):
                 print("IMAGE LOSS + VGG LOSS")
                 print("+"*30)
                 opt.losstype_print_tracker = False
-            return image_loss + vgg_perception_loss
+            return image_loss + opt.vgg_loss_coefficient*vgg_perception_loss
         
         elif opt.dis_perceptual_loss and opt.adversarial_loss and opt.coverage and not opt.vgg_loss:
             if opt.losstype_print_tracker:
@@ -153,7 +160,7 @@ class GeneratorLoss(nn.Module):
                 print("IMAGE LOSS + ADVERSARIAL LOSS + DIS PERCEPTUAL LOSS - COVERAGE")
                 print("+"*30)
                 opt.losstype_print_tracker = False
-            return image_loss + adversarial_loss + dis_perception_loss
+            return image_loss + opt.adversarial_loss_coefficient*adversarial_loss + opt.dis_perceptual_loss_coefficient*dis_perception_loss
         
         elif opt.dis_perceptual_loss and opt.adversarial_loss and not opt.vgg_loss:
             if opt.losstype_print_tracker:
@@ -164,7 +171,7 @@ class GeneratorLoss(nn.Module):
                     print("IMAGE LOSS + ADVERSARIAL LOSS + DIS PERCEPTUAL LOSS - NO COVERAGE")
                 print("+"*30)
                 opt.losstype_print_tracker = False
-            return image_loss + adversarial_loss + dis_perception_loss
+            return image_loss + opt.adversarial_loss_coefficient*adversarial_loss + opt.dis_perceptual_loss_coefficient*dis_perception_loss
         
         elif opt.dis_perceptual_loss and opt.adversarial_loss and opt.vgg_loss and opt.coverage:
             if opt.losstype_print_tracker:
@@ -172,7 +179,7 @@ class GeneratorLoss(nn.Module):
                 print("IMAGE LOSS + ADVERSARIAL LOSS + DIS PERCEPTUAL LOSS - COVERAGE + VGG LOSS")
                 print("+"*30)
                 opt.losstype_print_tracker = False
-            return image_loss + adversarial_loss + dis_perception_loss + vgg_perception_loss
+            return image_loss + opt.adversarial_loss_coefficient*adversarial_loss + opt.dis_perceptual_loss_coefficient*dis_perception_loss + opt.vgg_loss_coefficient*vgg_perception_loss
         
         elif opt.dis_perceptual_loss and opt.adversarial_loss and opt.vgg_loss:
             if opt.losstype_print_tracker:
@@ -180,7 +187,7 @@ class GeneratorLoss(nn.Module):
                 print("IMAGE LOSS + ADVERSARIAL LOSS + DIS PERCEPTUAL LOSS - NO COVERAGE + VGG LOSS")
                 print("+"*30)
                 opt.losstype_print_tracker = False
-            return image_loss + adversarial_loss + dis_perception_loss + vgg_perception_loss
+            return image_loss + opt.adversarial_loss_coefficient*adversarial_loss + opt.dis_perceptual_loss_coefficient*dis_perception_loss + opt.vgg_loss_coefficient*vgg_perception_loss
         else:
             if opt.losstype_print_tracker:
                 print("+"*30)

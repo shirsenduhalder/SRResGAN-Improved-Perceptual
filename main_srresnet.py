@@ -34,8 +34,8 @@ parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)"
 parser.add_argument("--sample_dir", default="outputs/samples/", help="Path to save traiing samples")
 parser.add_argument("--logs_dir", default="outputs/logs/", help="Path to save logs")
 parser.add_argument("--checkpoint_dir", default="outputs/checkpoint/", help="Path to save checkpoint")
-parser.add_argument("--adversarial_loss_coefficient", default=0.001, help="Coefficient for adversarial loss")
-parser.add_argument("--vgg_loss_coefficient", default=0.006, help="Coefficient for VGG loss")
+parser.add_argument("--adversarial_loss_coefficient", type=int, default=0.001, help="Coefficient for adversarial loss")
+parser.add_argument("--vgg_loss_coefficient", type=int, default=0.006, help="Coefficient for VGG loss")
 #changed
 parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
 parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
@@ -43,7 +43,7 @@ parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perc
 parser.add_argument("--huber_loss", action="store_true", help="Uses huber loss for computing perceptual loss from discriminator?")
 parser.add_argument("--softmax_loss", action="store_true", help="Use softmax normalized loss for discriminator perceptual loss?")
 parser.add_argument("--coverage", action="store_true", help="Use coverage?")
-parser.add_argument("--dis_perceptual_loss_coefficient", default=0.001, help="Coefficient for perceptual loss from discriminator")
+parser.add_argument("--dis_perceptual_loss_coefficient", type=int, default=0.001, help="Coefficient for perceptual loss from discriminator")
 
 def main():
 

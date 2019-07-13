@@ -7,16 +7,18 @@ class _Residual_Block(nn.Module):
         super(_Residual_Block, self).__init__()
 
         self.conv1 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.in1 = nn.InstanceNorm2d(64, affine=True)
+        # self.in1 = nn.InstanceNorm2d(64, affine=True)
         self.relu = nn.LeakyReLU(0.2, inplace=True)
         self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.in2 = nn.InstanceNorm2d(64, affine=True)
+        # self.in2 = nn.InstanceNorm2d(64, affine=True)
 
     def forward(self, x):
         identity_data = x
-        output = self.relu(self.in1(self.conv1(x)))
-        output = self.in2(self.conv2(output))
-        output = torch.add(output,identity_data)
+        # output = self.relu(self.in1(self.conv1(x)))
+        output = self.relu(self.conv1(x))
+        # output = self.in2(self.conv2(output))
+        output = self.conv2(output)
+        output = torch.add(output, identity_data)
         return output 
 
 class _NetG(nn.Module):
@@ -29,7 +31,7 @@ class _NetG(nn.Module):
         self.residual = self.make_layer(_Residual_Block, 16)
 
         self.conv_mid = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn_mid = nn.InstanceNorm2d(64, affine=True)
+        # self.bn_mid = nn.InstanceNorm2d(64, affine=True)
 
         self.upscale4x = nn.Sequential(
             nn.Conv2d(in_channels=64, out_channels=256, kernel_size=3, stride=1, padding=1, bias=False),
@@ -45,7 +47,8 @@ class _NetG(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                torch.nn.init.kaiming_normal_(m.weight * 0.1)
+                # m.weight.data.normal_(0, math.sqrt(0.2 / n))
                 if m.bias is not None:
                     m.bias.data.zero_()
 
@@ -59,7 +62,8 @@ class _NetG(nn.Module):
         out = self.relu(self.conv_input(x))
         residual = out
         out = self.residual(out)
-        out = self.bn_mid(self.conv_mid(out))
+        # out = self.bn_mid(self.conv_mid(out))
+        out = self.conv_mid(out)
         out = torch.add(out,residual)
         out = self.upscale4x(out)
         out = self.conv_output(out)
@@ -122,32 +126,39 @@ class _NetD(nn.Module):
 
     def forward(self, input):
 
-        out1 = self.relu1(self.conv1(input))
+        out1_noactiv = self.conv1(input)
+        out1 = self.relu1(out1_noactiv)
 
-        out2 = self.relu2(self.batchnorm2(self.conv2(out1)))
+        out2_noactiv = self.batchnorm2(self.conv2(out1))
+        out2 = self.relu2(out2_noactiv)
 
-        out3 = self.relu3(self.batchnorm3(self.conv3(out2)))
+        out3_noactiv = self.batchnorm3(self.conv3(out2))
+        out3 = self.relu3(out3_noactiv)
 
-        out4 = self.relu4(self.batchnorm4(self.conv4(out3)))
+        out4_noactiv = self.batchnorm4(self.conv4(out3))
+        out4 = self.relu4(out4_noactiv)
 
-        out5 = self.relu5(self.batchnorm5(self.conv5(out4)))
+        out5_noactiv = self.batchnorm5(self.conv5(out4))
+        out5 = self.relu5(out5_noactiv)
 
-        out6 = self.relu6(self.batchnorm6(self.conv6(out5)))
+        out6_noactiv = self.batchnorm6(self.conv6(out5))
+        out6 = self.relu6(out6_noactiv)
 
-        out7 = self.relu7(self.batchnorm7(self.conv7(out6)))
+        out7_noactiv = self.batchnorm7(self.conv7(out6))
+        out7 = self.relu7(out7_noactiv)
 
         out8 = self.relu8(self.batchnorm8(self.conv8(out7)))
         
-        out1 = out1.view(out1.size(0), -1)
-        out2 = out2.view(out1.size(0), -1)
-        out3 = out3.view(out1.size(0), -1)
-        out4 = out4.view(out1.size(0), -1)
-        out5 = out5.view(out1.size(0), -1)
-        out6 = out6.view(out1.size(0), -1)
-        out7 = out7.view(out1.size(0), -1)
+        out1_noactiv = out1_noactiv.view(out1_noactiv.size(0), -1)
+        out2_noactiv = out2_noactiv.view(out2_noactiv.size(0), -1)
+        out3_noactiv = out3_noactiv.view(out3_noactiv.size(0), -1)
+        out4_noactiv = out4_noactiv.view(out4_noactiv.size(0), -1)
+        out5_noactiv = out5_noactiv.view(out5_noactiv.size(0), -1)
+        out6_noactiv = out6_noactiv.view(out6_noactiv.size(0), -1)
+        out7_noactiv = out7_noactiv.view(out7_noactiv.size(0), -1)
 
         # state size. (512) x 6 x 6
-        out8 = out8.view(out1.size(0), -1)
+        out8 = out8.view(out8.size(0), -1)
 
         # state size. (512 x 6 x 6)
         out_fc1 = self.fc1(out8)
@@ -159,4 +170,4 @@ class _NetD(nn.Module):
         out_final = self.sigmoid(out_fc2)
         out_final = out_final.view(-1, 1).squeeze(1)
         
-        return out1, out2, out3, out4, out5, out6, out7, out_final
+        return out1_noactiv, out2_noactiv, out3_noactiv, out4_noactiv, out5_noactiv, out6_noactiv, out7_noactiv, out_final

@@ -11,6 +11,7 @@ from math import log10,floor
 from natsort import natsorted
 from skimage.measure import compare_psnr
 import matplotlib.pyplot as plt
+from utils import *
 
 parser = argparse.ArgumentParser(description="PyTorch SRResNet Eval")
 parser.add_argument("--cuda", action="store_true", help="use cuda?")
@@ -39,20 +40,7 @@ def rgb2ycbcr(img, only_y=True):
     else:
         rlt /= 255.
     return rlt.astype(in_img_type)
-'''
-def PSNR(pred, gt, shave_border=0):
-    height, width = pred.shape[:2]
-    pred = pred[shave_border:height - shave_border, shave_border:width - shave_border]
-    gt = gt[shave_border:height - shave_border, shave_border:width - shave_border]
-    imdff = pred - gt
-    rmse = math.sqrt(np.mean(imdff ** 2))
-    if rmse == 0:
-        return 100
-    return 20 * math.log10(255.0 / rmse)
-'''
 
-def PSNR(pred, gt):
-    return compare_psnr(pred, gt)
 
 opt = parser.parse_args()
 cuda = opt.cuda
@@ -74,7 +62,15 @@ image_list_hr = natsorted(glob2.glob(image_folder + "/*HR*.*"))
 image_list_lr = natsorted(glob2.glob(image_folder + "/*LR*.*"))
 
 avg_psnr_predicted = 0.0
+avg_ssim_predicted = 0.0
+avg_vif_predicted = 0.0
+avg_uqi_predicted = 0.0
+
 avg_psnr_bicubic = 0.0
+avg_ssim_bicubic = 0.0
+avg_vif_bicubic = 0.0
+avg_uqi_bicubic = 0.0
+
 avg_elapsed_time = 0.0
 
 for img_hr, img_lr in zip(image_list_hr, image_list_lr):
@@ -111,45 +107,43 @@ for img_hr, img_lr in zip(image_list_hr, image_list_lr):
     im_h = np.clip(im_h, 0, 255)  
     im_h = im_h.transpose(1,2,0).astype(np.uint8)
 
-    #im_h_matlab = matlab.double((im_h / 255.).tolist())
     
+    im_b = cv2.resize(im_l, (im_h.shape[1], im_h.shape[0])).astype(np.uint8)
     
-    # im_h_matlab = double(im_h / 255.)
-    
-    
-    # print(im_h_matlab)
-    # im_h  = convert(im_h_matlab)
-    # print(im_h)
-    #im_h_ycbcr = eng.rgb2ycbcr(im_h_matlab)
-    
-    
-    # im_h_ycbcr = rgb2ycbcr(im_h_matlab, only_y=False)*255
-    
-    
-    # im_h_ycbcr = np.array(im_h_ycbcr).reshape(im_h_ycbcr.size, order='F').astype(np.float32) * 255.
-    # print(im_h_ycbcr.shape)
-    
-    im_b = cv2.resize(im_l, (im_h.shape[1], im_h.shape[0]), cv2.INTER_CUBIC).astype(np.uint8)
-    # im_b_y = cv2.cvtColor(im_b, cv2.COLOR_BGR2YCR_CB)[:, :, 0]
+    bi_psnr, bi_ssim, bi_vif, bi_uqi = calc_metrics(im_b, im_gt, opt.scale_factor)
+    pred_psnr, pred_ssim, pred_vif, pred_uqi = calc_metrics(im_h, im_gt, opt.scale_factor)
 
-    # im_gt_y = cv2.cvtColor(im_gt, cv2.COLOR_BGR2YCR_CB)[:, :, 0]
+    avg_psnr_predicted += pred_psnr
+    avg_ssim_predicted += pred_ssim
+    avg_vif_predicted += pred_vif
+    avg_uqi_predicted += pred_uqi
 
-    psnr_bicubic = PSNR(im_b, im_gt)
-    avg_psnr_bicubic += psnr_bicubic
-    psnr_predicted = PSNR(im_h, im_gt)
-    avg_psnr_predicted += psnr_predicted
+    avg_psnr_bicubic += bi_psnr
+    avg_ssim_bicubic += bi_ssim
+    avg_vif_bicubic += bi_vif
+    avg_uqi_bicubic += bi_uqi
 
-    img_save = np.vstack([im_h, im_gt])
     save_folder = os.path.join(image_folder.replace('test', 'test_samples'), opt.model.split('/')[-2])
 
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
     
-    sio.imsave(os.path.join(save_folder, img_hr.split('/')[-1].replace('_HR', '')), img_save)
+    sio.imsave(os.path.join(save_folder, img_hr.split('/')[-1].replace('_HR', '')), im_h)
 
 
-print("Scale=", opt.scale_factor)
+# print("Scale=", opt.scale_factor)
 print("Dataset=", opt.test_folder.split('/')[-1])
+
 print("PSNR_predicted=", avg_psnr_predicted/len(image_list_hr))
 print("PSNR_bicubic=", avg_psnr_bicubic/len(image_list_hr))
-print("It takes average {}s for processing".format(avg_elapsed_time/len(image_list_hr)))
+
+print("SSIM_predicted=", avg_ssim_predicted/len(image_list_hr))
+print("SSIM_bicubic=", avg_ssim_bicubic/len(image_list_hr))
+
+
+print("VIF_predicted=", avg_vif_predicted/len(image_list_hr))
+print("VIF_bicubic=", avg_vif_bicubic/len(image_list_hr))
+
+print("UQI_predicted=", avg_uqi_predicted/len(image_list_hr))
+print("UQI_bicubic=", avg_uqi_bicubic/len(image_list_hr))
+# print("It takes average {}s for processing".format(avg_elapsed_time/len(image_list_hr)))

@@ -38,6 +38,7 @@ parser.add_argument("--adversarial_loss_coefficient", type=float, default=0.005,
 parser.add_argument("--vgg_loss_coefficient", type=float, default=0.5, help="Coefficient for VGG loss")
 parser.add_argument("--mse_loss_coefficient", type=float, default=0.01, help="Coefficient for MSE Loss")
 #changed
+parser.add_argument("--RRDB_block", action="store_true", help="Use content loss?")
 parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
 parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
 parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perceptual loss from discriminator?")
@@ -63,7 +64,7 @@ def main():
         assert opt.dis_perceptual_loss, "Softmax normalization is only valid for Discriminator Perceptual loss"
 
 
-    out_folder = "Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
+    out_folder = "RRDB({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(opt.RRDB_block, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
 
     writer = SummaryWriter(logdir = os.path.join(opt.logs_dir, out_folder), comment="-srgan-")
 
@@ -113,7 +114,7 @@ def main():
     print("===> Building model")
     # changed
     # Building generator and discriminator
-    model_G = _NetG()
+    model_G = _NetG(opt)
     
     #changed
     if opt.adversarial_loss:

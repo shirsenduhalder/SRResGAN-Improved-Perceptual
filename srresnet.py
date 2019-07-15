@@ -19,7 +19,7 @@ class _Residual_Block(nn.Module):
         # output = self.in2(self.conv2(output))
         output = self.conv2(output)
         output = torch.add(output, identity_data)
-        return output 
+        return output
 
 class _NetG(nn.Module):
     def __init__(self):

@@ -46,6 +46,7 @@ parser.add_argument("--huber_loss", action="store_true", help="Uses huber loss f
 parser.add_argument("--softmax_loss", action="store_true", help="Use softmax normalized loss for discriminator perceptual loss?")
 parser.add_argument("--coverage", action="store_true", help="Use coverage?")
 parser.add_argument("--dis_perceptual_loss_coefficient", type=float, default=1, help="Coefficient for perceptual loss from discriminator")
+parser.add_argument("--dataset", default="DIV2K", help="Enter Dataset, Default: [DIV2K], Options = ['DIV2K', 'Flickr2K', 'Set5', 'Set14', 'BSD100', 'Sun-Hays80', 'Urban100']")
 
 def main():
 

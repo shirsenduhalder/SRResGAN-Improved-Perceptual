@@ -46,6 +46,16 @@ class ResidualDenseBlock_5C(nn.Module):
         return x5 * 0.2 + x
 
 
+class MeanShift(nn.Conv2d):
+    def __init__(self, rgb_mean, rgb_std, sign=-1):
+        super(MeanShift, self).__init__(3, 3, kernel_size=1)
+        std = torch.Tensor(rgb_std)
+        self.weight.data = torch.eye(3).view(3, 3, 1, 1)
+        self.weight.data.div_(std.view(3, 1, 1, 1))
+        self.bias.data = sign * 255. * torch.Tensor(rgb_mean)
+        self.bias.data.div_(std)
+        self.requires_grad = False
+
 class RRDB(nn.Module):
     '''Residual in Residual Dense Block'''
 
@@ -65,6 +75,14 @@ class _NetG(nn.Module):
     def __init__(self, opt):
         super(_NetG, self).__init__()
         self.opt = opt
+
+        #RGB Mean for DIV2K
+        rgb_mean = (0.4488, 0.4371, 0.4040)
+        rgb_std = (1.0, 1.0, 1.0)
+
+        self.sub_mean = MeanShift(rgb_mean, rgb_std)
+        self.add_mean = MeanShift(rgb_mean, rgb_std, 1)
+
         if opt.RRDB_block:
             in_nc, out_nc, nf, nb, gc = 3, 3, 64, 23, 32
             RRDB_block_f = functools.partial(RRDB, nf=nf, gc=gc)

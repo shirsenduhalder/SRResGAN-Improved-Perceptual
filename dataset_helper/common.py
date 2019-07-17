@@ -3,6 +3,7 @@ import random
 import numpy as np
 import scipy.misc as misc
 from tqdm import tqdm
+from natsort import natsorted
 
 import torch
 
@@ -21,8 +22,8 @@ def is_binary_file(filename):
 def _get_paths_from_images(path):
     assert os.path.isdir(path), '[Error] [%s] is not a valid directory' % path
     images = []
-    for dirpath, _, fnames in sorted(os.walk(path)):
-        for fname in sorted(fnames):
+    for dirpath, _, fnames in natsorted(os.walk(path)):
+        for fname in natsorted(fnames):
             if is_image_file(fname):
                 img_path = os.path.join(dirpath, fname)
                 images.append(img_path)
@@ -33,8 +34,8 @@ def _get_paths_from_images(path):
 def _get_paths_from_binary(path):
     assert os.path.isdir(path), '[Error] [%s] is not a valid directory' % path
     files = []
-    for dirpath, _, fnames in sorted(os.walk(path)):
-        for fname in sorted(fnames):
+    for dirpath, _, fnames in natsorted(os.walk(path)):
+        for fname in natsorted(fnames):
             if is_binary_file(fname):
                 binary_path = os.path.join(dirpath, fname)
                 files.append(binary_path)
@@ -46,7 +47,7 @@ def get_image_paths(data_type, dataroot):
     paths = None
     if dataroot is not None:
         if data_type == 'img':
-            paths = sorted(_get_paths_from_images(dataroot))
+            paths = natsorted(_get_paths_from_images(dataroot))
         elif data_type == 'npy':
             if dataroot.find('_npy') < 0 :
                 old_dir = dataroot
@@ -54,7 +55,7 @@ def get_image_paths(data_type, dataroot):
                 if not os.path.exists(dataroot):
                     print('===> Creating binary files in [%s]' % dataroot)
                     os.makedirs(dataroot)
-                    img_paths = sorted(_get_paths_from_images(old_dir))
+                    img_paths = natsorted(_get_paths_from_images(old_dir))
                     path_bar = tqdm(img_paths)
                     for v in path_bar:
                         img = misc.imread(v, mode='RGB')
@@ -64,7 +65,7 @@ def get_image_paths(data_type, dataroot):
                 else:
                     print('===> Binary files already exists in [%s]. Skip binary files generation.' % dataroot)
 
-            paths = sorted(_get_paths_from_binary(dataroot))
+            paths = natsorted(_get_paths_from_binary(dataroot))
 
         else:
             raise NotImplementedError("[Error] Data_type [%s] is not recognized." % data_type)
@@ -105,7 +106,7 @@ def np2Tensor(l, rgb_range):
         # if img.shape[2] == 3: # for opencv imread
         #     img = img[:, :, [2, 1, 0]]
         np_transpose = np.ascontiguousarray(img.transpose((2, 0, 1)))
-        tensor = torch.from_numpy(np_transpose).float()
+        tensor = torch.from_numpy(np_transpose.copy()).float()
         tensor.mul_(rgb_range / 255.)
 
         return tensor

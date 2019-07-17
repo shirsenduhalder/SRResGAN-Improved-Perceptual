@@ -52,7 +52,7 @@ class MeanShift(nn.Conv2d):
         std = torch.Tensor(rgb_std)
         self.weight.data = torch.eye(3).view(3, 3, 1, 1)
         self.weight.data.div_(std.view(3, 1, 1, 1))
-        self.bias.data = sign * 255. * torch.Tensor(rgb_mean)
+        self.bias.data = sign * torch.Tensor(rgb_mean) # *255.
         self.bias.data.div_(std)
         self.requires_grad = False
 
@@ -132,6 +132,7 @@ class _NetG(nn.Module):
 
     def forward(self, x):
         if self.opt.RRDB_block:
+            x = self.sub_mean(x)
             fea = self.conv_first(x)
             trunk = self.trunk_conv(self.RRDB_trunk(fea))
             fea = fea + trunk
@@ -148,6 +149,7 @@ class _NetG(nn.Module):
             out = torch.add(out,residual)
             out = self.upscale4x(out)
             out = self.conv_output(out)
+            x = self.add_mean(x)
             return out
 
 class _NetD(nn.Module):
@@ -198,6 +200,10 @@ class _NetD(nn.Module):
         self.fc2 = nn.Linear(1024, 1)
         self.sigmoid = nn.Sigmoid()
 
+        rgb_mean = (0.4488, 0.4371, 0.4040)
+        rgb_std = (1.0, 1.0, 1.0)
+        self.sub_mean = MeanShift(rgb_mean, rgb_std)
+
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 m.weight.data.normal_(0.0, 0.02)
@@ -206,6 +212,7 @@ class _NetD(nn.Module):
                 m.bias.data.fill_(0)
 
     def forward(self, input):
+        input = self.sub_mean(input)
 
         out1_noactiv = self.conv1(input)
         out1 = self.relu1(out1_noactiv)

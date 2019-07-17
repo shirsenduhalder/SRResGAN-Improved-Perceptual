@@ -15,6 +15,10 @@ from loss import *
 import matplotlib.pyplot as plt
 import numpy as np
 from tensorboardX import SummaryWriter
+from dataset_helper import create_dataloader
+from dataset_helper import create_dataset
+from dataset_helper.common import find_benchmark
+import options.options as option
 
 STEPS = 0
 os.environ["HDF5_USE_FILE_LOCKING"]='FALSE'
@@ -37,6 +41,7 @@ parser.add_argument("--checkpoint_dir", default="outputs/checkpoint/", help="Pat
 parser.add_argument("--adversarial_loss_coefficient", type=float, default=0.005, help="Coefficient for adversarial loss")
 parser.add_argument("--vgg_loss_coefficient", type=float, default=0.5, help="Coefficient for VGG loss")
 parser.add_argument("--mse_loss_coefficient", type=float, default=0.01, help="Coefficient for MSE Loss")
+parser.add_argument('-options', default='options/train_SRGAN.json', type=str, help='Path to options JSON file.')
 #changed
 parser.add_argument("--RRDB_block", action="store_true", help="Use content loss?")
 parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
@@ -46,7 +51,7 @@ parser.add_argument("--huber_loss", action="store_true", help="Uses huber loss f
 parser.add_argument("--softmax_loss", action="store_true", help="Use softmax normalized loss for discriminator perceptual loss?")
 parser.add_argument("--coverage", action="store_true", help="Use coverage?")
 parser.add_argument("--dis_perceptual_loss_coefficient", type=float, default=1, help="Coefficient for perceptual loss from discriminator")
-parser.add_argument("--dataset", default="DIV2K", help="Enter Dataset, Default: [DIV2K], Options = ['DIV2K', 'Flickr2K', 'Set5', 'Set14', 'BSD100', 'Sun-Hays80', 'Urban100']")
+# parser.add_argument("--dataset", default="DIV2K, Flickr2K", help="Enter Dataset, Default: [DIV2K], Options = ['DIV2K', 'Flickr2K', 'Set5', 'Set14', 'BSD100', 'Sun-Hays80', 'Urban100']")
 
 def main():
 
@@ -56,7 +61,9 @@ def main():
     global opt, model_G, model_D, netContent, writer, STEPS
 
     opt = parser.parse_args()
+    options = option.parse(opt.options)
     print(opt)
+    print(options)
     
     if opt.dis_perceptual_loss:
         assert opt.adversarial_loss, "Discriminator perceptual loss is invalid without adversarial loss"
@@ -90,9 +97,16 @@ def main():
     cudnn.benchmark = True
 
     print("===> Loading datasets")
-    train_set = DatasetFromHdf5("data/srresnet_x4.h5")
-    training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, \
-        batch_size=opt.batchSize, shuffle=True)
+    # train_set = DatasetFromHdf5("data/srresnet_x4.h5")
+    # training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, \
+    #     batch_size=opt.batchSize, shuffle=True)
+
+    dataset_opt = options['datasets']['train']
+    train_set = create_dataset(dataset_opt)
+    training_data_loader = create_dataloader(train_set, dataset_opt)
+    print('===> Train Dataset: %s   Number of images: [%d]' % (train_set.name(), len(train_set)))
+    if training_data_loader is None: raise ValueError("[Error] The training data does not exist")
+        
 
     print('===> Loading VGG model')
     netVGG = models.vgg19()
@@ -202,7 +216,9 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
 
     for iteration, batch in enumerate(training_data_loader, 1):
 
-        input, target = Variable(batch[0]), Variable(batch[1], requires_grad=False)
+        input, target = Variable(batch['LR']), Variable(batch['HR'], requires_grad=False)
+        input = input/255
+        target = target/255
         
 
         STEPS += input.shape[0]

@@ -1,7 +1,7 @@
 import os
 import random
 import numpy as np
-import scipy.misc as misc
+import skimage.io as sio
 from tqdm import tqdm
 from natsort import natsorted
 
@@ -58,7 +58,7 @@ def get_image_paths(data_type, dataroot):
                     img_paths = natsorted(_get_paths_from_images(old_dir))
                     path_bar = tqdm(img_paths)
                     for v in path_bar:
-                        img = misc.imread(v, mode='RGB')
+                        img = sio.imread(v)
                         ext = os.path.splitext(os.path.basename(v))[-1]
                         name_sep = os.path.basename(v.replace(ext, '.npy'))
                         np.save(os.path.join(dataroot, name_sep), img)
@@ -83,10 +83,10 @@ def find_benchmark(dataroot):
 
 
 def read_img(path, data_type):
-    # read image by misc or from .npy
+    # read image by sio or from .npy
     # return: Numpy float32, HWC, RGB, [0,255]
     if data_type == 'img':
-        img = misc.imread(path, mode='RGB')
+        img = sio.imread(path)
     elif data_type.find('npy') >= 0:
         img = np.load(path)
     else:

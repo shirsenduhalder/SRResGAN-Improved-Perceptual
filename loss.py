@@ -17,9 +17,7 @@ class GeneratorLoss(nn.Module):
         self.steps += out_images.shape[0]
         # print("Image loss: {}".format(image_loss.item()))
 
-        self.ones_const = Variable(torch.ones(opt.batchSize))
         if opt.cuda:
-            self.ones_const = self.ones_const.cuda()
             self.mse_loss = self.mse_loss.cuda()
             self.bce_loss = self.bce_loss.cuda()
             self.huber_loss = self.huber_loss.cuda()
@@ -31,7 +29,10 @@ class GeneratorLoss(nn.Module):
         image_loss = self.mse_loss(out_images, target_images)
         self.writer.add_scalar("Image Loss", image_loss, self.steps)
 
-        if opt.adversarial_loss:   
+        if opt.adversarial_loss:
+            self.ones_const = Variable(torch.ones(out_labels.size()[0]))
+            if opt.cuda:
+                self.ones_const = self.ones_const.cuda()
             adversarial_loss = self.bce_loss(out_labels, self.ones_const)
             self.writer.add_scalar("Gen Adversarial Loss", adversarial_loss, self.steps)
             # print("Adversarial Loss: {}".format(adversarial_loss.item()))

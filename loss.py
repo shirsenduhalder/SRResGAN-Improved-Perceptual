@@ -82,14 +82,14 @@ class GeneratorLoss(nn.Module):
                 self.writer.add_scalar("Dis Sum Softmax Loss", sum_exp_loss, self.steps)
 
             if opt.coverage:
-                coverage0 = 0.9 * coverage + 0.1 * softmax_loss0
-                coverage1 = 0.9 * coverage + 0.1 * softmax_loss1
-                coverage2 = 0.9 * coverage + 0.1 * softmax_loss2
-                coverage3 = 0.9 * coverage + 0.1 * softmax_loss3
-                coverage4 = 0.9 * coverage + 0.1 * softmax_loss4
-                coverage5 = 0.9 * coverage + 0.1 * softmax_loss5
-                coverage6 = 0.9 * coverage + 0.1 * softmax_loss6
-                coverage7 = 0.9 * coverage + 0.1 * softmax_loss7
+                coverage0 = (opt.coverage_coefficient) * coverage0 + (1 - opt.coverage_coefficient) * softmax_loss0
+                coverage1 = (opt.coverage_coefficient) * coverage1 + (1 - opt.coverage_coefficient) * softmax_loss1
+                coverage2 = (opt.coverage_coefficient) * coverage2 + (1 - opt.coverage_coefficient) * softmax_loss2
+                coverage3 = (opt.coverage_coefficient) * coverage3 + (1 - opt.coverage_coefficient) * softmax_loss3
+                coverage4 = (opt.coverage_coefficient) * coverage4 + (1 - opt.coverage_coefficient) * softmax_loss4
+                coverage5 = (opt.coverage_coefficient) * coverage5 + (1 - opt.coverage_coefficient) * softmax_loss5
+                coverage6 = (opt.coverage_coefficient) * coverage6 + (1 - opt.coverage_coefficient) * softmax_loss6
+                coverage7 = (opt.coverage_coefficient) * coverage7 + (1 - opt.coverage_coefficient) * softmax_loss7
 
                 self.writer.add_scalar("Dis coverage-0", coverage0, self.steps)
                 self.writer.add_scalar("Dis coverage-1", coverage1, self.steps)

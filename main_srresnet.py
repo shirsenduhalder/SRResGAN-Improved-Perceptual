@@ -34,23 +34,25 @@ parser.add_argument("--resume", default="", type=str, help="Path to checkpoint (
 parser.add_argument("--start-epoch", default=1, type=int, help="Manual epoch number (useful on restarts)")
 parser.add_argument("--threads", type=int, default=0, help="Number of threads for data loader to use, Default: 1")
 parser.add_argument("--pretrained", default="", type=str, help="path to pretrained model (default: none)")
-parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
 parser.add_argument("--sample_dir", default="outputs/samples/", help="Path to save traiing samples")
 parser.add_argument("--logs_dir", default="outputs/logs/", help="Path to save logs")
 parser.add_argument("--checkpoint_dir", default="outputs/checkpoint/", help="Path to save checkpoint")
-parser.add_argument("--adversarial_loss_coefficient", type=float, default=0.005, help="Coefficient for adversarial loss")
-parser.add_argument("--vgg_loss_coefficient", type=float, default=0.5, help="Coefficient for VGG loss")
-parser.add_argument("--mse_loss_coefficient", type=float, default=0.01, help="Coefficient for MSE Loss")
 parser.add_argument('-options', default='options/train_SRGAN.json', type=str, help='Path to options JSON file.')
+parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
 #changed
 parser.add_argument("--RRDB_block", action="store_true", help="Use content loss?")
 parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
 parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
 parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perceptual loss from discriminator?")
-parser.add_argument("--huber_loss", action="store_true", help="Uses huber loss for computing perceptual loss from discriminator?")
+# parser.add_argument("--huber_loss", action="store_true", help="Uses huber loss for computing perceptual loss from discriminator?")
 parser.add_argument("--softmax_loss", action="store_true", help="Use softmax normalized loss for discriminator perceptual loss?")
 parser.add_argument("--coverage", action="store_true", help="Use coverage?")
+#coefficient
+parser.add_argument("--mse_loss_coefficient", type=float, default=0.01, help="Coefficient for MSE Loss")
+parser.add_argument("--vgg_loss_coefficient", type=float, default=0.5, help="Coefficient for VGG loss")
+parser.add_argument("--adversarial_loss_coefficient", type=float, default=0.005, help="Coefficient for adversarial loss")
 parser.add_argument("--dis_perceptual_loss_coefficient", type=float, default=1, help="Coefficient for perceptual loss from discriminator")
+parser.add_argument("--coverage_coefficient", type=float, default=0.99, help="Mixing ratio / effective horizon")
 # parser.add_argument("--dataset", default="DIV2K, Flickr2K", help="Enter Dataset, Default: [DIV2K], Options = ['DIV2K', 'Flickr2K', 'Set5', 'Set14', 'BSD100', 'Sun-Hays80', 'Urban100']")
 
 def main():
@@ -61,6 +63,7 @@ def main():
     global opt, model_G, model_D, netContent, writer, STEPS
 
     opt = parser.parse_args()
+    opt.huber_loss = True
     options = option.parse(opt.options)
     print(opt)
     print(options)

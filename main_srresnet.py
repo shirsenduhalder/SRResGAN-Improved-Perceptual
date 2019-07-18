@@ -41,6 +41,7 @@ parser.add_argument('-options', default='options/train_SRGAN.json', type=str, he
 parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
 #changed
 parser.add_argument("--RRDB_block", action="store_true", help="Use content loss?")
+parser.add_argument("--mse_major", action="store_true", help="Set MSE coeff 1 and Percep coeff 0.01")
 parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
 parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
 parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perceptual loss from discriminator?")
@@ -63,10 +64,13 @@ def main():
     global opt, model_G, model_D, netContent, writer, STEPS
 
     opt = parser.parse_args()
+    if opt.mse_major:
+        opt.mse_loss_coefficient = 1
+        opt.dis_perceptual_loss_coefficient = 0.01
     opt.huber_loss = True
     options = option.parse(opt.options)
     print(opt)
-    print(options)
+    # print(options)
     
     if opt.dis_perceptual_loss:
         assert opt.adversarial_loss, "Discriminator perceptual loss is invalid without adversarial loss"
@@ -75,7 +79,7 @@ def main():
         assert opt.dis_perceptual_loss, "Softmax normalization is only valid for Discriminator Perceptual loss"
 
 
-    out_folder = "RRDB({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(opt.RRDB_block, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
+    out_folder = "RRDB({})_mseMajor({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(opt.RRDB_block, opt.mse_major, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
 
     writer = SummaryWriter(logdir = os.path.join(opt.logs_dir, out_folder), comment="-srgan-")
 
@@ -105,6 +109,8 @@ def main():
     #     batch_size=opt.batchSize, shuffle=True)
 
     dataset_opt = options['datasets']['train']
+    dataset_opt['batch_size'] = opt.batchSize
+    print(dataset_opt)
     train_set = create_dataset(dataset_opt)
     training_data_loader = create_dataloader(train_set, dataset_opt)
     print('===> Train Dataset: %s   Number of images: [%d]' % (train_set.name(), len(train_set)))
@@ -218,7 +224,6 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         model_D.train()
 
     for iteration, batch in enumerate(training_data_loader, 1):
-
         input, target = Variable(batch['LR']), Variable(batch['HR'], requires_grad=False)
         input = input/255
         target = target/255
@@ -232,8 +237,8 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
 
         output = model_G(input)
         
-        target_real = Variable(torch.rand(opt.batchSize)*0.5 + 0.7).cuda()
-        target_fake = Variable(torch.rand(opt.batchSize)*0.3).cuda()
+        target_real = Variable(torch.rand(input.size()[0])*0.5 + 0.7).cuda()
+        target_fake = Variable(torch.rand(input.size()[0])*0.3).cuda()
 
         if opt.adversarial_loss:
             model_D.zero_grad()

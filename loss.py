@@ -17,7 +17,9 @@ class GeneratorLoss(nn.Module):
         self.steps += out_images.shape[0]
         # print("Image loss: {}".format(image_loss.item()))
 
+        self.ones_const = Variable(torch.ones(out_images.size()[0]))
         if opt.cuda:
+        	self.ones_const = self.ones_const.cuda()
             self.mse_loss = self.mse_loss.cuda()
             self.bce_loss = self.bce_loss.cuda()
             self.huber_loss = self.huber_loss.cuda()
@@ -30,9 +32,6 @@ class GeneratorLoss(nn.Module):
         self.writer.add_scalar("Image Loss", image_loss, self.steps)
 
         if opt.adversarial_loss:
-            self.ones_const = Variable(torch.ones(out_labels.size()[0]))
-            if opt.cuda:
-                self.ones_const = self.ones_const.cuda()
             adversarial_loss = self.bce_loss(out_labels, self.ones_const)
             self.writer.add_scalar("Gen Adversarial Loss", adversarial_loss, self.steps)
             # print("Adversarial Loss: {}".format(adversarial_loss.item()))
@@ -43,7 +42,7 @@ class GeneratorLoss(nn.Module):
             # print("VGG Loss: {}".format(perception_loss.item()))
         
         if opt.dis_perceptual_loss and opt.adversarial_loss:
-            coverage, coverage0, coverage1, coverage2, coverage3, coverage4, coverage5, coverage6, coverage7 = 1, 1, 1, 1, 1, 1, 1, 1, 1
+            coverage0, coverage1, coverage2, coverage3, coverage4, coverage5, coverage6, coverage7 = 1, 1, 1, 1, 1, 1, 1, 1, 1
             softmax_loss0, softmax_loss1, softmax_loss2, softmax_loss3, softmax_loss4, softmax_loss5, softmax_loss6, softmax_loss7 = 1, 1, 1, 1, 1, 1, 1, 1
 
             target_1, target_2, target_3, target_4, target_5, target_6, target_7 = self.dis_network(target_images)[:-1]

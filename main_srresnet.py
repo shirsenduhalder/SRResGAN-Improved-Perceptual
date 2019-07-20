@@ -278,7 +278,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
             #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
             # else:
             
-            sample_img = utils.make_grid(torch.cat([output.detach().clone(), target], dim=0), padding=2, normalize=True)
+            sample_img = utils.make_grid(torch.cat([output.detach().clone(), target], dim=0), padding=2, normalize=False)
             if not os.path.exists(opt.sample_dir):
                 os.makedirs(opt.sample_dir)
             

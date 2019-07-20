@@ -1,13 +1,23 @@
-# PyTorch SRResNet
-Implementation of Paper: "Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network"(https://arxiv.org/abs/1609.04802) in PyTorch
+# More to Perceptual 
+Implementation of Paper: "More to Perceptual Loss in Super Resolution"
 
 ## Usage
 ### Training
 ```
 usage: main_srresnet.py [-h] [--batchSize BATCHSIZE] [--nEpochs NEPOCHS]
-                        [--lr LR] [--step STEP] [--cuda] [--resume RESUME]
-                        [--start-epoch START_EPOCH] [--threads THREADS]
-                        [--pretrained PRETRAINED] [--vgg_loss] [--gpus GPUS]
+                        [--lr LR] [--step STEP] [--cuda CUDA]
+                        [--resume RESUME] [--start-epoch START_EPOCH]
+                        [--threads THREADS] [--pretrained PRETRAINED]
+                        [--sample_dir SAMPLE_DIR] [--logs_dir LOGS_DIR]
+                        [--checkpoint_dir CHECKPOINT_DIR] [-options OPTIONS]
+                        [--gpus GPUS] [--RRDB_block] [--mse_major]
+                        [--vgg_loss] [--adversarial_loss]
+                        [--dis_perceptual_loss] [--softmax_loss] [--coverage]
+                        [--mse_loss_coefficient MSE_LOSS_COEFFICIENT]
+                        [--vgg_loss_coefficient VGG_LOSS_COEFFICIENT]
+                        [--adversarial_loss_coefficient ADVERSARIAL_LOSS_COEFFICIENT]
+                        [--dis_perceptual_loss_coefficient DIS_PERCEPTUAL_LOSS_COEFFICIENT]
+                        [--coverage_coefficient COVERAGE_COEFFICIENT]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -17,19 +27,43 @@ optional arguments:
   --lr LR               Learning Rate. Default=1e-4
   --step STEP           Sets the learning rate to the initial LR decayed by
                         momentum every n epochs, Default: n=500
-  --cuda                Use cuda?
+  --cuda CUDA           Use cuda?
   --resume RESUME       Path to checkpoint (default: none)
   --start-epoch START_EPOCH
                         Manual epoch number (useful on restarts)
   --threads THREADS     Number of threads for data loader to use, Default: 1
   --pretrained PRETRAINED
                         path to pretrained model (default: none)
-  --vgg_loss            Use content loss?
+  --sample_dir SAMPLE_DIR
+                        Path to save traiing samples
+  --logs_dir LOGS_DIR   Path to save logs
+  --checkpoint_dir CHECKPOINT_DIR
+                        Path to save checkpoint
+  -options OPTIONS      Path to options JSON file.
   --gpus GPUS           gpu ids (default: 0)
+  --RRDB_block          Use content loss?
+  --mse_major           Set MSE coeff 1 and Percep coeff 0.01
+  --vgg_loss            Use content loss?
+  --adversarial_loss    Use adversarial loss of generator?
+  --dis_perceptual_loss
+                        Use perceptual loss from discriminator?
+  --softmax_loss        Use softmax normalized loss for discriminator
+                        perceptual loss?
+  --coverage            Use coverage?
+  --mse_loss_coefficient MSE_LOSS_COEFFICIENT
+                        Coefficient for MSE Loss
+  --vgg_loss_coefficient VGG_LOSS_COEFFICIENT
+                        Coefficient for VGG loss
+  --adversarial_loss_coefficient ADVERSARIAL_LOSS_COEFFICIENT
+                        Coefficient for adversarial loss
+  --dis_perceptual_loss_coefficient DIS_PERCEPTUAL_LOSS_COEFFICIENT
+                        Coefficient for perceptual loss from discriminator
+  --coverage_coefficient COVERAGE_COEFFICIENT
+                        Mixing ratio / effective horizon
 ```
-An example of training usage is shown as follows:
+The training code for our model is shown as follows:
 ```
-python main_srresnet.py --cuda --vgg_loss --gpus 0
+python main_srresnet.py --cuda --gpus 0 --adversarial_loss --dis_perceptual_loss --softmax_loss --mse_loss_coefficient 0.01 --adversarial_loss_coefficient 0.05 --dis_perceptual_loss_coefficient 1
 ```
 
 ### demo
@@ -89,6 +123,3 @@ python eval.py --model model/model_srresnet.pth --dataset Set5 --cuda
 
 ### Result
 From left to right are ground truth, bicubic and SRResNet
-<p>
-  <img src='result/result.png' height='260' width='700'/>
-</p>

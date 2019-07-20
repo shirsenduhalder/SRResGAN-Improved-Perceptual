@@ -11,7 +11,7 @@ from math import log10,floor
 from natsort import natsorted
 from skimage.measure import compare_psnr
 import matplotlib.pyplot as plt
-from utils import *
+import utils.eval_utils as utils 
 
 parser = argparse.ArgumentParser(description="PyTorch SRResNet Eval")
 parser.add_argument("--cuda", action="store_true", help="use cuda?")
@@ -110,8 +110,8 @@ for img_hr, img_lr in zip(image_list_hr, image_list_lr):
     
     im_b = cv2.resize(im_l, (im_h.shape[1], im_h.shape[0])).astype(np.uint8)
     
-    bi_psnr, bi_ssim, bi_vif, bi_uqi = calc_metrics(im_b, im_gt, opt.scale_factor)
-    pred_psnr, pred_ssim, pred_vif, pred_uqi = calc_metrics(im_h, im_gt, opt.scale_factor)
+    bi_psnr, bi_ssim, bi_vif, bi_uqi = utils.calc_metrics(im_b, im_gt, opt.scale_factor)
+    pred_psnr, pred_ssim, pred_vif, pred_uqi = utils.calc_metrics(im_h, im_gt, opt.scale_factor)
 
     avg_psnr_predicted += pred_psnr
     avg_ssim_predicted += pred_ssim
@@ -123,7 +123,7 @@ for img_hr, img_lr in zip(image_list_hr, image_list_lr):
     avg_vif_bicubic += bi_vif
     avg_uqi_bicubic += bi_uqi
 
-    save_folder = os.path.join(image_folder.replace('test', 'test_samples'), opt.model.split('/')[-2])
+    save_folder = os.path.join(image_folder.replace('data', 'results'), opt.model.split('/')[-2])
 
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)

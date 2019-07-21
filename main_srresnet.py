@@ -23,6 +23,7 @@ import datetime as dt
 from eval_save import *
 
 STEPS = 0
+BEST_PSNR, BEST_VIF = 0, 0
 os.environ["HDF5_USE_FILE_LOCKING"]='FALSE'
 
 # Training settings
@@ -325,14 +326,27 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
             start_time = dt.datetime.now()
 
 def save_checkpoint(model, epoch):
-    model_out_path = os.path.join(opt.checkpoint_file,  "model_epoch_{}.pth".format(epoch))
-    state = {"epoch": epoch ,"model": model}
-    if not os.path.exists(opt.checkpoint_file):
-        os.makedirs(opt.checkpoint_file)
+    psnr_test, _, vif_test, _ = eval_metrics('data/test/Set14', model, scale_factor=4, cuda=True, show_bicubic=False, save_images=False)
 
-    torch.save(state, model_out_path)
+    global BEST_PSNR, BEST_VIF
+    
+    writer.add_scalar("PSNR", psnr_test, epoch)
+    write.add_scalar("VIF", vif_test, epoch)
 
-    print("Checkpoint saved to {}".format(model_out_path))
+
+    if psnr_test > BEST_PSNR or vif_test > BEST_VIF:
+        model_out_path = os.path.join(opt.checkpoint_file,  "model_epoch_{}_PSNR_{}_VIF_{}.pth".format(epoch, psnr_test, vif_test))
+        state = {"epoch": epoch ,"model": model}
+        if not os.path.exists(opt.checkpoint_file):
+            os.makedirs(opt.checkpoint_file)
+
+        torch.save(state, model_out_path)
+
+        print("PSNR updated {} ====> {}, VIF updated {} ====> {}".format(BEST_PSNR, psnr_test, BEST_VIF, vif_test))
+        print("Checkpoint saved to {}".format(model_out_path))
+
+        BEST_PSNR = psnr_test
+        BEST_VIF = vif_test
 
 if __name__ == "__main__":
     main()

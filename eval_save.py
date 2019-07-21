@@ -46,7 +46,10 @@ def eval_metrics(test_folder, model_name, scale_factor, cuda, show_bicubic=False
         if not torch.cuda.is_available():
                 raise Exception("No GPU found or Wrong gpu id, please run without --cuda")
 
-    model = torch.load(model_name)['model']
+    if type(model_name) == str:
+        model = torch.load(model_name)['model']
+    else:
+        model = model_name
 
     image_folder =  os.path.join(test_folder, 'image_SRF_{}'.format(scale_factor))
 
@@ -66,8 +69,9 @@ def eval_metrics(test_folder, model_name, scale_factor, cuda, show_bicubic=False
 
     avg_elapsed_time = 0.0
 
+    print("Calculating metric evaluations.... ")
+    
     for img_hr, img_lr in zip(image_list_hr, image_list_lr):
-        print("Processing ", img_hr)
 
         im_gt = sio.imread(img_hr)
         im_l = sio.imread(img_lr)
@@ -117,7 +121,7 @@ def eval_metrics(test_folder, model_name, scale_factor, cuda, show_bicubic=False
         avg_uqi_predicted += pred_uqi
 
         
-        if save_images:
+        if save_images and type(model_name) == str:
             save_folder = os.path.join(image_folder.replace('data', 'results'), model_name.split('/')[-2])
 
             if not os.path.exists(save_folder):
@@ -126,18 +130,20 @@ def eval_metrics(test_folder, model_name, scale_factor, cuda, show_bicubic=False
             sio.imsave(os.path.join(save_folder, img_hr.split('/')[-1].replace('_HR', '')), im_h)
 
 
-    print("PSNR_predicted=", avg_psnr_predicted/len(image_list_hr))
-    print("SSIM_predicted=", avg_ssim_predicted/len(image_list_hr))
-    print("VIF_predicted=", avg_vif_predicted/len(image_list_hr))
-    print("UQI_predicted=", avg_uqi_predicted/len(image_list_hr))
-
     if show_bicubic:
         print("PSNR_bicubic=", avg_psnr_bicubic/len(image_list_hr))
         print("SSIM_bicubic=", avg_ssim_bicubic/len(image_list_hr))
         print("VIF_bicubic=", avg_vif_bicubic/len(image_list_hr))
         print("UQI_bicubic=", avg_uqi_bicubic/len(image_list_hr))
 
+    return avg_psnr_predicted/len(image_list_hr), avg_ssim_predicted/len(image_list_hr), avg_vif_predicted/len(image_list_hr), avg_uqi_predicted/len(image_list_hr)
+
 if __name__=="__main__":
     opt = parser.parse_args()
 
-    eval_metrics(opt.test_folder, opt.model, opt.scale_factor, opt.cuda, show_bicubic=True, save_images=True)
+    psnr_pred, ssim_pred, vif_pred, uqi_pred = eval_metrics(opt.test_folder, opt.model, opt.scale_factor, opt.cuda, show_bicubic=True, save_images=True)
+    
+    print("PSNR_predicted=", psnr_pred)
+    print("SSIM_predicted=", ssim_pred)
+    print("VIF_predicted=", vif_pred)
+    print("UQI_predicted=", uqi_pred)

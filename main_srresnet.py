@@ -21,6 +21,7 @@ from dataset_helper.common import find_benchmark
 import options.options as option
 import datetime as dt
 from eval_save import *
+import pickle
 
 STEPS = 0
 BEST_PSNR, BEST_VIF = 0, 0
@@ -326,7 +327,21 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
             start_time = dt.datetime.now()
 
 def save_checkpoint(model, epoch):
-    psnr_test, _, vif_test, _ = eval_metrics('data/test/Set14', model, scale_factor=4, cuda=True, show_bicubic=False, save_images=False)
+
+    test_dump_file = 'data/dump/Test5.pickle'
+
+    if os.path.isfile(test_dump_file):
+        with open(test_dump_file, 'rb') as p:
+            images_test = pickle.load(p)
+        images_hr = images_test['images_hr']
+        images_lr = images_test['images_lr']
+        print("===>Loading Checkpoint Test images")
+    else:
+        images_hr, images_lr = create_val_ims()
+        print("===>Creating Checkpoint Test images")
+        
+
+    psnr_test, _, vif_test, _ = eval_metrics(images_hr, images_lr, model, scale_factor=4, cuda=True, show_bicubic=False, save_images=False)
 
     global BEST_PSNR, BEST_VIF
     
@@ -342,11 +357,39 @@ def save_checkpoint(model, epoch):
 
         torch.save(state, model_out_path)
 
-        print("PSNR updated {} ====> {}, VIF updated {} ====> {}".format(BEST_PSNR, psnr_test, BEST_VIF, vif_test))
         print("Checkpoint saved to {}".format(model_out_path))
 
-        BEST_PSNR = psnr_test
-        BEST_VIF = vif_test
+        if psnr_test > BEST_PSNR:
+            BEST_PSNR = psnr_test
+            print("PSNR updated {} ====> {}".format(BEST_PSNR, psnr_test))
+        if vif_test > BEST_VIF:
+            print("VIF updated {} ====> {}".format(BEST_VIF, vif_test))
+            BEST_VIF = vif_test
+
+def create_val_ims():
+    
+    images_test = {}
+    images_hr, images_lr = [], []
+
+    test_root = 'data/test/Set5/image_SRF_4'
+    img_hr_names = natsorted(glob2.glob(test_root + "/*HR*.*"))
+    img_lr_names = natsorted(glob2.glob(test_root + "/*LR*.*"))
+
+    for hr, lr in zip(img_hr_names, img_lr_names):
+        images_hr.append(sio.imread(hr))
+        images_lr.append(sio.imread(lr))
+    images_test['images_hr'] = images_hr
+    images_test['images_lr'] = images_lr
+
+    dump_dir = "data/dump/"
+
+    if not os.path.exists(dump_dir):
+        os.makedirs(dump_dir)
+    
+    with open(os.path.join(dump_dir, 'Test5.pickle'), 'wb') as p:
+        pickle.dump(images_test, p, protocol=pickle.HIGHEST_PROTOCOL)
+    
+    return images_hr, images_lr
 
 if __name__ == "__main__":
     main()

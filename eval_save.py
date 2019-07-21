@@ -40,7 +40,7 @@ def rgb2ycbcr(img, only_y=True):
         rlt /= 255.
     return rlt.astype(in_img_type)
 
-def eval_metrics(test_folder, model_name, scale_factor, cuda, show_bicubic=False, save_images=False):
+def eval_metrics(image_list_hr, image_list_lr, model_name, scale_factor, cuda, show_bicubic=False, save_images=False):
     assert scale_factor in [2, 3, 4], "Scale factor not supported"
     if cuda:
         if not torch.cuda.is_available():
@@ -50,11 +50,6 @@ def eval_metrics(test_folder, model_name, scale_factor, cuda, show_bicubic=False
         model = torch.load(model_name)['model']
     else:
         model = model_name
-
-    image_folder =  os.path.join(test_folder, 'image_SRF_{}'.format(scale_factor))
-
-    image_list_hr = natsorted(glob2.glob(image_folder + "/*HR*.*"))
-    image_list_lr = natsorted(glob2.glob(image_folder + "/*LR*.*"))
 
     avg_psnr_predicted = 0.0
     avg_ssim_predicted = 0.0
@@ -72,9 +67,15 @@ def eval_metrics(test_folder, model_name, scale_factor, cuda, show_bicubic=False
     print("Calculating metric evaluations.... ")
     
     for img_hr, img_lr in zip(image_list_hr, image_list_lr):
+        
+        assert type(img_hr) == type(img_lr), "LR and HR image type mismatch"
 
-        im_gt = sio.imread(img_hr)
-        im_l = sio.imread(img_lr)
+        if isinstance(img_hr, str):
+            im_gt = sio.imread(img_hr)
+            im_l = sio.imread(img_lr)
+        else:
+            im_gt = img_hr
+            im_l = img_lr
 
         if im_gt.ndim == 2:
             im_gt = np.tile(np.expand_dims(im_gt, axis=-1), (1, 1, 3))
@@ -141,7 +142,12 @@ def eval_metrics(test_folder, model_name, scale_factor, cuda, show_bicubic=False
 if __name__=="__main__":
     opt = parser.parse_args()
 
-    psnr_pred, ssim_pred, vif_pred, uqi_pred = eval_metrics(opt.test_folder, opt.model, opt.scale_factor, opt.cuda, show_bicubic=True, save_images=True)
+    image_folder =  os.path.join(opt.test_folder, 'image_SRF_{}'.format(opt.scale_factor))
+
+    image_list_hr = natsorted(glob2.glob(image_folder + "/*HR*.*"))
+    image_list_lr = natsorted(glob2.glob(image_folder + "/*LR*.*"))
+
+    psnr_pred, ssim_pred, vif_pred, uqi_pred = eval_metrics(image_list_hr, image_list_lr, opt.model, opt.scale_factor, opt.cuda, show_bicubic=True, save_images=True)
     
     print("PSNR_predicted=", psnr_pred)
     print("SSIM_predicted=", ssim_pred)

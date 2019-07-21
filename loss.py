@@ -3,17 +3,17 @@ import torch.nn as nn
 from torch.autograd import Variable
 
 class GeneratorLoss(nn.Module):
-    def __init__(self, vgg_network, dis_network, writer, steps):
+    def __init__(self, vgg_network, writer, steps):
         super(GeneratorLoss, self).__init__()
         self.vgg_network = vgg_network
-        self.dis_network = dis_network
+        # self.dis_network = dis_network
         self.writer = writer
         self.steps = steps
         self.mse_loss = nn.MSELoss()
         self.bce_loss = nn.BCELoss()
         self.huber_loss = nn.SmoothL1Loss()
     
-    def forward(self, out_labels, out_images, target_images, opt):
+    def forward(self, target_disc, out_disc, out_labels, out_images, target_images, opt):
         self.steps += out_images.shape[0]
         # print("Image loss: {}".format(image_loss.item()))
 
@@ -28,7 +28,7 @@ class GeneratorLoss(nn.Module):
         if opt.huber_loss:
             self.hybrid_l2_l1_loss = self.huber_loss
 
-        image_loss = self.mse_loss(out_images, target_images)
+        image_loss = self.hybrid_l2_l1_loss(out_images, target_images)
         self.writer.add_scalar("Image Loss", image_loss, self.steps)
 
         if opt.adversarial_loss:
@@ -45,9 +45,11 @@ class GeneratorLoss(nn.Module):
             coverage0, coverage1, coverage2, coverage3, coverage4, coverage5, coverage6, coverage7 = 1, 1, 1, 1, 1, 1, 1, 1
             softmax_loss0, softmax_loss1, softmax_loss2, softmax_loss3, softmax_loss4, softmax_loss5, softmax_loss6, softmax_loss7 = 1, 1, 1, 1, 1, 1, 1, 1
 
-            target_1, target_2, target_3, target_4, target_5, target_6, target_7 = self.dis_network(target_images)[:-1]
+            # target_1, target_2, target_3, target_4, target_5, target_6, target_7 = self.dis_network(target_images)[:-1]
+            target_1, target_2, target_3, target_4, target_5, target_6, target_7 = target_disc[:-1]
 
-            out_1, out_2, out_3, out_4, out_5, out_6, out_7 = self.dis_network(out_images)[:-1]
+            # out_1, out_2, out_3, out_4, out_5, out_6, out_7 = self.dis_network(out_images)[:-1]
+            out_1, out_2, out_3, out_4, out_5, out_6, out_7 = out_disc[:-1]
 
             loss0 = self.hybrid_l2_l1_loss(target_images, out_images)
             loss1 = self.hybrid_l2_l1_loss(target_1, out_1)

@@ -142,7 +142,7 @@ class _NetG(nn.Module):
             out = self.add_mean(out)
             return out
         else:
-        	x = self.sub_mean(x)
+            x = self.sub_mean(x)
             out = self.relu(self.conv_input(x))
             residual = out
             out = self.residual(out)

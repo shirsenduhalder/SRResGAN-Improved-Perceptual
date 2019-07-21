@@ -19,6 +19,7 @@ from dataset_helper import create_dataloader
 from dataset_helper import create_dataset
 from dataset_helper.common import find_benchmark
 import options.options as option
+import datetime as dt
 
 STEPS = 0
 os.environ["HDF5_USE_FILE_LOCKING"]='FALSE'
@@ -40,7 +41,8 @@ parser.add_argument("--checkpoint_dir", default="outputs/checkpoint/", help="Pat
 parser.add_argument('-options', default='options/train_SRGAN.json', type=str, help='Path to options JSON file.')
 parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
 #changed
-parser.add_argument("--RRDB_block", action="store_true", help="Use content loss?")
+parser.add_argument("--target_net_flag", action="store_true", help="Use target network in discriminator for stabler training?")
+parser.add_argument("--target_frequency", default=100, type=int, help="Frequency of updating the target network")
 parser.add_argument("--mse_major", action="store_true", help="Set MSE coeff 1 and Percep coeff 0.01")
 parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
 parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
@@ -48,6 +50,7 @@ parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perc
 # parser.add_argument("--huber_loss", action="store_true", help="Uses huber loss for computing perceptual loss from discriminator?")
 parser.add_argument("--softmax_loss", action="store_true", help="Use softmax normalized loss for discriminator perceptual loss?")
 parser.add_argument("--coverage", action="store_true", help="Use coverage?")
+parser.add_argument("--RRDB_block", action="store_true", help="Use content loss?")
 #coefficient
 parser.add_argument("--mse_loss_coefficient", type=float, default=0.01, help="Coefficient for MSE Loss")
 parser.add_argument("--vgg_loss_coefficient", type=float, default=0.5, help="Coefficient for VGG loss")
@@ -56,12 +59,16 @@ parser.add_argument("--dis_perceptual_loss_coefficient", type=float, default=1, 
 parser.add_argument("--coverage_coefficient", type=float, default=0.99, help="Mixing ratio / effective horizon")
 # parser.add_argument("--dataset", default="DIV2K, Flickr2K", help="Enter Dataset, Default: [DIV2K], Options = ['DIV2K', 'Flickr2K', 'Set5', 'Set14', 'BSD100', 'Sun-Hays80', 'Urban100']")
 
+def hard_update(target, source):
+    for target_param, param in zip(target.parameters(), source.parameters()):
+            target_param.data.copy_(param.data)
+
 def main():
 
     #changed
     # global opt, model, netContent
 
-    global opt, model_G, model_D, netContent, writer, STEPS
+    global opt, model_G, model_D, target_model_D, netContent, writer, STEPS
 
     opt = parser.parse_args()
     if opt.mse_major:
@@ -78,8 +85,14 @@ def main():
     if opt.softmax_loss:
         assert opt.dis_perceptual_loss, "Softmax normalization is only valid for Discriminator Perceptual loss"
 
+    if opt.target_net_flag:
+        assert opt.dis_perceptual_loss, "Target network is only valid for Discriminator Perceptual loss"
 
-    out_folder = "RRDB({})_mseMajor({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(opt.RRDB_block, opt.mse_major, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
+    if opt.target_net_flag:
+    	exp_name = "True_"+str(opt.target_frequency)
+    else:
+    	exp_name = "False"
+    out_folder = "Target({})_mseMajor({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(exp_name, opt.mse_major, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
 
     writer = SummaryWriter(logdir = os.path.join(opt.logs_dir, out_folder), comment="-srgan-")
 
@@ -143,12 +156,17 @@ def main():
     #changed
     if opt.adversarial_loss:
         model_D = _NetD()
+        target_model_D = None
+        if opt.target_net_flag:
+            target_model_D = _NetD()
+            hard_update(target_model_D, model_D)
         criterion_D = nn.BCELoss()
     else:
         model_D = None
+        target_model_D = None
         criterion_D = None
 
-    criterion_G = GeneratorLoss(netContent, model_D, writer, STEPS)
+    criterion_G = GeneratorLoss(netContent, writer, STEPS)
 
     print("===> Setting GPU")
     if cuda:
@@ -157,6 +175,8 @@ def main():
 
         if opt.adversarial_loss:    
             model_D = model_D.cuda()
+            if opt.target_net_flag:
+                target_model_D = target_model_D.cuda()
             criterion_D = criterion_D.cuda()
 
         criterion_G = criterion_G.cuda()
@@ -198,7 +218,7 @@ def main():
     opt.losstype_print_tracker = True
     for epoch in range(opt.start_epoch, opt.nEpochs + 1):
         # changed
-        train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, criterion_G, criterion_D, epoch, STEPS)
+        train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch, STEPS)
         save_checkpoint(model_G, epoch)
 
 def adjust_learning_rate(optimizer, epoch):
@@ -206,7 +226,7 @@ def adjust_learning_rate(optimizer, epoch):
     lr = opt.lr * (0.1 ** (epoch // opt.step))
     return lr 
 
-def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, criterion_G, criterion_D, epoch, STEPS):
+def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch, STEPS):
 
     lr = adjust_learning_rate(optimizer_G, epoch-1)
     
@@ -223,6 +243,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
     if opt.adversarial_loss:
         model_D.train()
 
+    start_time = dt.datetime.now()
     for iteration, batch in enumerate(training_data_loader, 1):
         input, target = Variable(batch['LR']), Variable(batch['HR'], requires_grad=False)
         input = input/255
@@ -240,15 +261,26 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         target_real = Variable(torch.rand(input.size()[0])*0.5 + 0.7).cuda()
         target_fake = Variable(torch.rand(input.size()[0])*0.3).cuda()
 
+        target_disc = None
+        out_disc = None
+
         if opt.adversarial_loss:
             model_D.zero_grad()
-            real_out = model_D(target)[-1]
-            fake_out = model_D(output)[-1]
+            target_disc = model_D(target)
+            out_disc = model_D(output)
+            real_out = target_disc[-1]
+            fake_out = out_disc[-1]
             loss_d = criterion_D(real_out, target_real) + criterion_D(fake_out, target_fake)
             loss_d.backward(retain_graph=True)
             optimizer_D.step()
         else:
             fake_out = None
+
+        if opt.target_net_flag:
+            target_disc = target_model_D(target)
+            out_disc = target_model_D(output)
+            if iteration%opt.target_frequency == 0:
+                hard_update(target_model_D, model_D)
 
 
         # if opt.vgg_loss:
@@ -258,7 +290,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
         #     content_loss = criterion(content_input, content_target)
 
         optimizer_G.zero_grad()
-        loss_g = criterion_G(fake_out, output, target, opt)
+        loss_g = criterion_G(target_disc, out_disc, fake_out, output, target, opt)
 
         # if opt.vgg_loss:
         #     netContent.zero_grad()
@@ -286,9 +318,10 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, crit
 
         if iteration%100 == 0:
             if opt.adversarial_loss:
-                print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item()))
+                print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3}, Time: {} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item(), (dt.datetime.now()-start_time).seconds))
             else:
-                print("===> Epoch[{}]({}/{}): Loss: {:.3}".format(epoch, iteration, len(training_data_loader), loss_g.item()))
+                print("===> Epoch[{}]({}/{}): Loss: {:.3}, Time: {} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), (dt.datetime.now()-start_time).seconds))
+            start_time = dt.datetime.now()
 
 def save_checkpoint(model, epoch):
     model_out_path = os.path.join(opt.checkpoint_file,  "model_epoch_{}.pth".format(epoch))

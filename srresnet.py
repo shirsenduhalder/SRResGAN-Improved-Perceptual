@@ -139,8 +139,10 @@ class _NetG(nn.Module):
             fea = self.lrelu(self.upconv1(F.interpolate(fea, scale_factor=2, mode='nearest')))
             fea = self.lrelu(self.upconv2(F.interpolate(fea, scale_factor=2, mode='nearest')))
             out = self.conv_last(self.lrelu(self.HRconv(fea)))
+            x = self.add_mean(x)
             return out
         else:
+        	x = self.sub_mean(x)
             out = self.relu(self.conv_input(x))
             residual = out
             out = self.residual(out)
@@ -149,7 +151,7 @@ class _NetG(nn.Module):
             out = torch.add(out,residual)
             out = self.upscale4x(out)
             out = self.conv_output(out)
-            x = self.add_mean(x)
+            out = self.add_mean(out)
             return out
 
 class _NetD(nn.Module):

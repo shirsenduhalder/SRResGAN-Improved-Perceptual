@@ -139,7 +139,7 @@ class _NetG(nn.Module):
             fea = self.lrelu(self.upconv1(F.interpolate(fea, scale_factor=2, mode='nearest')))
             fea = self.lrelu(self.upconv2(F.interpolate(fea, scale_factor=2, mode='nearest')))
             out = self.conv_last(self.lrelu(self.HRconv(fea)))
-            x = self.add_mean(x)
+            out = self.add_mean(out)
             return out
         else:
         	x = self.sub_mean(x)

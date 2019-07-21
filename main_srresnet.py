@@ -331,10 +331,10 @@ def save_checkpoint(model, epoch):
     global BEST_PSNR, BEST_VIF
     
     writer.add_scalar("PSNR", psnr_test, epoch)
-    write.add_scalar("VIF", vif_test, epoch)
+    writer.add_scalar("VIF", vif_test, epoch)
 
 
-    if psnr_test > BEST_PSNR or vif_test > BEST_VIF:
+    if psnr_test > BEST_PSNR or vif_test > BEST_VIF or epoch%10==0:
         model_out_path = os.path.join(opt.checkpoint_file,  "model_epoch_{}_PSNR_{}_VIF_{}.pth".format(epoch, psnr_test, vif_test))
         state = {"epoch": epoch ,"model": model}
         if not os.path.exists(opt.checkpoint_file):

@@ -293,6 +293,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
             fake_out = None
 
         if opt.target_net_flag:
+        	target_model_D.eval()
             target_disc = target_model_D(target)
             out_disc = target_model_D(output)
             if STEPS%opt.target_frequency == 0:

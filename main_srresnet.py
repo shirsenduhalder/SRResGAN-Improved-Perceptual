@@ -45,7 +45,8 @@ parser.add_argument('-options', default='options/train_SRGAN.json', type=str, he
 parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
 #changed
 parser.add_argument("--target_net_flag", action="store_true", help="Use target network in discriminator for stabler training?")
-parser.add_argument("--target_frequency", default=100, type=int, help="Frequency of updating the target network")
+parser.add_argument("--target_TAU", default=0.001, type=float, help="Mixing ratio for updating the target network")
+# parser.add_argument("--target_frequency", default=100, type=int, help="Frequency of updating the target network")
 parser.add_argument("--mse_major", action="store_true", help="Set MSE coeff 1 and Percep coeff 0.01")
 parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
 parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
@@ -64,7 +65,11 @@ parser.add_argument("--coverage_coefficient", type=float, default=0.99, help="Mi
 
 def hard_update(target, source):
     for target_param, param in zip(target.parameters(), source.parameters()):
-            target_param.data.copy_(param.data)
+        target_param.data.copy_(param.data)
+
+def soft_update(target, source, tau):
+    for target_param, param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
 def main():
 
@@ -92,7 +97,7 @@ def main():
         assert opt.dis_perceptual_loss, "Target network is only valid for Discriminator Perceptual loss"
 
     if opt.target_net_flag:
-    	exp_name = "True_"+str(opt.target_frequency)
+    	exp_name = "True_"+str(opt.target_TAU)
     else:
     	exp_name = "False"
     out_folder = "Target({})_mseMajor({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(exp_name, opt.mse_major, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
@@ -293,11 +298,12 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
             fake_out = None
 
         if opt.target_net_flag:
-        	target_model_D.eval()
+            target_model_D.eval()
             target_disc = target_model_D(target)
             out_disc = target_model_D(output)
-            if STEPS%opt.target_frequency == 0:
-                hard_update(target_model_D, model_D)
+            soft_update(target_model_D, model_D, opt.target_TAU)
+            # if STEPS%opt.target_frequency == 0:
+            #     hard_update(target_model_D, model_D)
 
 
         # if opt.vgg_loss:

@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-import torchvision.utils as utils
+import torchvision.utils as torch_utils
 from srresnet import _NetG, _NetD
 from dataset import DatasetFromHdf5
 from torchvision import models
@@ -45,7 +45,8 @@ parser.add_argument('-options', default='options/train_SRGAN.json', type=str, he
 parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
 #changed
 parser.add_argument("--target_net_flag", action="store_true", help="Use target network in discriminator for stabler training?")
-parser.add_argument("--target_frequency", default=100, type=int, help="Frequency of updating the target network")
+parser.add_argument("--target_TAU", default=0.001, type=float, help="Mixing ratio for updating the target network")
+# parser.add_argument("--target_frequency", default=100, type=int, help="Frequency of updating the target network")
 parser.add_argument("--mse_major", action="store_true", help="Set MSE coeff 1 and Percep coeff 0.01")
 parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
 parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
@@ -64,7 +65,11 @@ parser.add_argument("--coverage_coefficient", type=float, default=0.99, help="Mi
 
 def hard_update(target, source):
     for target_param, param in zip(target.parameters(), source.parameters()):
-            target_param.data.copy_(param.data)
+        target_param.data.copy_(param.data)
+
+def soft_update(target, source, tau):
+    for target_param, param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
 def main():
 
@@ -92,7 +97,7 @@ def main():
         assert opt.dis_perceptual_loss, "Target network is only valid for Discriminator Perceptual loss"
 
     if opt.target_net_flag:
-    	exp_name = "True_"+str(opt.target_frequency)
+    	exp_name = "True_"+str(opt.target_TAU)
     else:
     	exp_name = "False"
     out_folder = "Target({})_mseMajor({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(exp_name, opt.mse_major, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
@@ -216,13 +221,26 @@ def main():
     else:
         optimizer_D = None
 
+    print("===> Pre-fetching validation data for monitoring training")
+    test_dump_file = 'data/dump/Test5.pickle'
+
+    if os.path.isfile(test_dump_file):
+        with open(test_dump_file, 'rb') as p:
+            images_test = pickle.load(p)
+        images_hr = images_test['images_hr']
+        images_lr = images_test['images_lr']
+        print("===>Loading Checkpoint Test images")
+    else:
+        images_hr, images_lr = create_val_ims()
+        print("===>Creating Checkpoint Test images")
+
     print("===> Training")
     #to track loss type
     opt.losstype_print_tracker = True
     for epoch in range(opt.start_epoch, opt.nEpochs + 1):
         # changed
         train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch, STEPS)
-        save_checkpoint(model_G, epoch)
+        save_checkpoint(images_hr, images_lr, model_G, epoch)
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10"""
@@ -253,7 +271,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
         target = target/255
         
 
-        STEPS += input.shape[0]
+        STEPS += 1 # input.shape[0]
 
         if opt.cuda:
             input = input.cuda()
@@ -280,10 +298,12 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
             fake_out = None
 
         if opt.target_net_flag:
+            target_model_D.eval()
             target_disc = target_model_D(target)
             out_disc = target_model_D(output)
-            if iteration%opt.target_frequency == 0:
-                hard_update(target_model_D, model_D)
+            soft_update(target_model_D, model_D, opt.target_TAU)
+            # if STEPS%opt.target_frequency == 0:
+            #     hard_update(target_model_D, model_D)
 
 
         # if opt.vgg_loss:
@@ -313,11 +333,11 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
             #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
             # else:
             
-            sample_img = utils.make_grid(torch.cat([output.detach().clone(), target], dim=0), padding=2, normalize=False)
+            sample_img = torch_utils.make_grid(torch.cat([output.detach().clone(), target], dim=0), padding=2, normalize=False)
             if not os.path.exists(opt.sample_dir):
                 os.makedirs(opt.sample_dir)
             
-            utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
+            torch_utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
 
         if iteration%100 == 0:
             if opt.adversarial_loss:
@@ -326,20 +346,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
                 print("===> Epoch[{}]({}/{}): Loss: {:.3}, Time: {} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), (dt.datetime.now()-start_time).seconds))
             start_time = dt.datetime.now()
 
-def save_checkpoint(model, epoch):
-
-    test_dump_file = 'data/dump/Test5.pickle'
-
-    if os.path.isfile(test_dump_file):
-        with open(test_dump_file, 'rb') as p:
-            images_test = pickle.load(p)
-        images_hr = images_test['images_hr']
-        images_lr = images_test['images_lr']
-        print("===>Loading Checkpoint Test images")
-    else:
-        images_hr, images_lr = create_val_ims()
-        print("===>Creating Checkpoint Test images")
-        
+def save_checkpoint(images_hr, images_lr, model, epoch):        
 
     psnr_test, _, vif_test, _ = eval_metrics(images_hr, images_lr, model, scale_factor=4, cuda=True, show_bicubic=False, save_images=False)
 
@@ -359,9 +366,9 @@ def save_checkpoint(model, epoch):
 
         print("Checkpoint saved to {}".format(model_out_path))
 
-        if psnr_test > BEST_PSNR:
-            BEST_PSNR = psnr_test
+        if psnr_test > BEST_PSNR:            
             print("PSNR updated {} ====> {}".format(BEST_PSNR, psnr_test))
+            BEST_PSNR = psnr_test
         if vif_test > BEST_VIF:
             print("VIF updated {} ====> {}".format(BEST_VIF, vif_test))
             BEST_VIF = vif_test

@@ -15,7 +15,7 @@ import utils.eval_utils as utils
 
 parser = argparse.ArgumentParser(description="PyTorch SRResNet Eval")
 parser.add_argument("--cuda", action="store_true", help="use cuda?")
-parser.add_argument("--model", required=True, type=str, help="model path")
+parser.add_argument("--model", required=True, help="model path")
 parser.add_argument("--test_folder", default="data/test/Set5", help="Enter test dataset folder")
 parser.add_argument("--scale_factor", default=4, type=int, help="scale factor, Default: 4, Options: {2, 3, 4}")
 parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
@@ -121,15 +121,13 @@ def eval_metrics(image_list_hr, image_list_lr, model_name, scale_factor, cuda, s
         avg_vif_predicted += pred_vif
         avg_uqi_predicted += pred_uqi
 
-        
-        if save_images and type(model_name) == str:
-            save_folder = os.path.join(image_folder.replace('data', 'results'), model_name.split('/')[-2])
+        if save_images:
+            save_folder = os.path.join(image_folder.replace('data', 'results'), model_name.split('/')[-3],  model_name.split('/')[-2])
 
             if not os.path.exists(save_folder):
                 os.makedirs(save_folder)
             
-            sio.imsave(os.path.join(save_folder, img_hr.split('/')[-1].replace('_HR', '')), im_h)
-
+            sio.imsave(os.path.join(save_folder, img_hr.split('/')[-1].replace('_HR', '_SR')), im_h)
 
     if show_bicubic:
         print("PSNR_bicubic=", avg_psnr_bicubic/len(image_list_hr))

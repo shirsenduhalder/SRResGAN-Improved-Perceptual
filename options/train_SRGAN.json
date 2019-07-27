@@ -11,7 +11,7 @@
             "dataroot_LR": "data/train/LR_complete",
             "data_type": "npy",
             "n_workers": 4,
-            "batch_size": 16,
+            "batch_size": 1,
             "LR_size": 24,
             "use_flip": true,
             "use_rot": true,

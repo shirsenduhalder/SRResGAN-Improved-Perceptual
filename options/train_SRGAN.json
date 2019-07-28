@@ -7,11 +7,11 @@
     "datasets": {
         "train": {
             "mode": "LRHR",
-            "dataroot_HR": "data/train/HR_complete",
-            "dataroot_LR": "data/train/LR_complete",
+            "dataroot_HR": "data/train/HR",
+            "dataroot_LR": "data/train/LR",
             "data_type": "npy",
             "n_workers": 4,
-            "batch_size": 1,
+            "batch_size": 16,
             "LR_size": 24,
             "use_flip": true,
             "use_rot": true,

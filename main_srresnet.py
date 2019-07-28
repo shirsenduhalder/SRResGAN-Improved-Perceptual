@@ -30,9 +30,9 @@ os.environ["HDF5_USE_FILE_LOCKING"]='FALSE'
 # Training settings
 parser = argparse.ArgumentParser(description="PyTorch SRResNet")
 parser.add_argument("--batchSize", type=int, default=16, help="training batch size")
-parser.add_argument("--nEpochs", type=int, default=1000, help="number of epochs to train for")
+parser.add_argument("--nEpochs", type=int, default=2000, help="number of epochs to train for")
 parser.add_argument("--lr", type=float, default=1e-4, help="Learning Rate. Default=1e-4")
-parser.add_argument("--step", type=int, default=5e4, help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=500")
+parser.add_argument("--step", type=int, default=1e5, help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=500")
 parser.add_argument("--cuda", default="true", help="Use cuda?")
 parser.add_argument("--resume", default="", type=str, help="Path to checkpoint (default: none)")
 parser.add_argument("--start-epoch", default=1, type=int, help="Manual epoch number (useful on restarts)")
@@ -100,7 +100,7 @@ def main():
     	exp_name = "True_"+str(opt.target_TAU)
     else:
     	exp_name = "False"
-    out_folder = "complete_Target({})_mseMajor({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(exp_name, opt.mse_major, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
+    out_folder = "Target({})_mseMajor({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(exp_name, opt.mse_major, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
 
     writer = SummaryWriter(logdir = os.path.join(opt.logs_dir, out_folder), comment="-srgan-")
 
@@ -239,15 +239,26 @@ def main():
     opt.losstype_print_tracker = True
     for epoch in range(opt.start_epoch, opt.nEpochs + 1):
         # changed
-        train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch)
+        train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch, STEPS)
         save_checkpoint(images_hr, images_lr, model_G, epoch)
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10"""
-    lr = opt.lr * (0.5 ** (STEPS // opt.step))
-    return lr 
+    # lr = opt.lr * (0.5 ** (STEPS // opt.step))
+    if STEPS < 5e4:
+        return opt.lr
+    elif STEPS < 1e5:
+        return opt.lr/2
+    elif STEPS < 2e5:
+        return opt.lr/4
+    elif STEPS < 3e5:
+        return opt.lr/8
+    elif STEPS < 45e4:
+        return opt.lr/16
+    else:
+        return opt.lr/32 * (0.5 ** ((STEPS-45e4) // opt.step))
 
-def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch):
+def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch, STEPS):
 
     lr = adjust_learning_rate(optimizer_G, epoch-1)
     
@@ -328,7 +339,7 @@ def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, targ
         if opt.adversarial_loss:            
             writer.add_scalar("Loss_D", loss_d.item(), STEPS)
 
-        if iteration%1000 == 0:
+        if iteration%500 == 0:
             # if opt.vgg_loss:
             #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
             # else:

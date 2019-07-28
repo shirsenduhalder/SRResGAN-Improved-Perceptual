@@ -142,7 +142,7 @@ class _NetG(nn.Module):
             out = self.add_mean(out)
             return out
         else:
-            # x = self.sub_mean(x)
+            x = self.sub_mean(x)
             out = self.relu(self.conv_input(x))
             residual = out
             out = self.residual(out)
@@ -151,7 +151,7 @@ class _NetG(nn.Module):
             out = torch.add(out,residual)
             out = self.upscale4x(out)
             out = self.conv_output(out)
-            # out = self.add_mean(out)
+            out = self.add_mean(out)
             return out
 
 class _NetD(nn.Module):
@@ -214,7 +214,7 @@ class _NetD(nn.Module):
                 m.bias.data.fill_(0)
 
     def forward(self, input):
-        # input = self.sub_mean(input)
+        input = self.sub_mean(input)
 
         out1_noactiv = self.conv1(input)
         out1 = self.relu1(out1_noactiv)

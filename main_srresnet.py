@@ -1,4 +1,6 @@
 import argparse, os
+from copy import deepcopy
+from basic_utils import Fvp, conjugate_gradients
 import torch
 import math, random
 import torch.backends.cudnn as cudnn
@@ -30,105 +32,65 @@ os.environ["HDF5_USE_FILE_LOCKING"]='FALSE'
 # Training settings
 parser = argparse.ArgumentParser(description="PyTorch SRResNet")
 parser.add_argument("--batchSize", type=int, default=16, help="training batch size")
-parser.add_argument("--nEpochs", type=int, default=2000, help="number of epochs to train for")
-parser.add_argument("--lr", type=float, default=1e-4, help="Learning Rate. Default=1e-4")
-parser.add_argument("--step", type=int, default=1e5, help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=500")
-parser.add_argument("--cuda", default="true", help="Use cuda?")
-parser.add_argument("--resume", default="", type=str, help="Path to checkpoint (default: none)")
+parser.add_argument("--max_updates", type=int, default=1e6, help="number of updates during training")
 parser.add_argument("--start-epoch", default=1, type=int, help="Manual epoch number (useful on restarts)")
-parser.add_argument("--threads", type=int, default=0, help="Number of threads for data loader to use, Default: 1")
-parser.add_argument("--pretrained", default="", type=str, help="path to pretrained model (default: none)")
-parser.add_argument("--sample_dir", default="outputs/samples/", help="Path to save traiing samples")
-parser.add_argument("--logs_dir", default="outputs/logs/", help="Path to save logs")
-parser.add_argument("--checkpoint_dir", default="outputs/checkpoint/", help="Path to save checkpoint")
 parser.add_argument('-options', default='options/train_SRGAN.json', type=str, help='Path to options JSON file.')
 parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
-#changed
-parser.add_argument("--target_net_flag", action="store_true", help="Use target network in discriminator for stabler training?")
-parser.add_argument("--target_TAU", default=0.001, type=float, help="Mixing ratio for updating the target network")
-# parser.add_argument("--target_frequency", default=100, type=int, help="Frequency of updating the target network")
-parser.add_argument("--mse_major", action="store_true", help="Set MSE coeff 1 and Percep coeff 0.01")
-parser.add_argument("--vgg_loss", action="store_true", help="Use content loss?")
-parser.add_argument("--adversarial_loss", action="store_true", help="Use adversarial loss of generator?")
-parser.add_argument("--dis_perceptual_loss", action="store_true", help="Use perceptual loss from discriminator?")
-# parser.add_argument("--huber_loss", action="store_true", help="Uses huber loss for computing perceptual loss from discriminator?")
-parser.add_argument("--softmax_loss", action="store_true", help="Use softmax normalized loss for discriminator perceptual loss?")
-parser.add_argument("--coverage", action="store_true", help="Use coverage?")
-parser.add_argument("--RRDB_block", action="store_true", help="Use content loss?")
+parser.add_argument("--pretrained", default="model/MSE_major_1500.pth", type=str, help="path to pretrained model (default: initialized with MSE major model)")
+parser.add_argument("--lr_disc", type=float, default=1e-4, help="Learning Rate. Default=1e-4")
+
+parser.add_argument("--sample_dir", default="outputs/samples/", help="Path to save traiing samples")
+parser.add_argument("--fine_sample_dir", default="outputs/finetune_samples/", help="Path to save traiing samples")
+parser.add_argument("--logs_dir", default="outputs/logs/", help="Path to save logs")
+parser.add_argument("--checkpoint_dir", default="outputs/checkpoint/", help="Path to save checkpoint")
+parser.add_argument("--fine_checkpoint_dir", default="outputs/finetune_checkpoint/", help="Path to save checkpoint")
+parser.add_argument("--epoch_frequency", type=int, default=50, help="NA")
+parser.add_argument("--epoch_finetune_frequency", type=int, default=10, help="NA")
+
+parser.add_argument("--CG_steps", type=int, default=20, help="Number of CG steps to compute the meta-gradient")
 #coefficient
-parser.add_argument("--mse_loss_coefficient", type=float, default=0.01, help="Coefficient for MSE Loss")
+parser.add_argument("--mse_loss_coefficient_inner", type=float, default=0.01, help="Coefficient for MSE Loss in the inner loop")
+parser.add_argument("--mse_loss_coefficient_outer", type=float, default=0.01, help="Coefficient for MSE Loss in the outer loop")
 parser.add_argument("--vgg_loss_coefficient", type=float, default=0.5, help="Coefficient for VGG loss")
 parser.add_argument("--adversarial_loss_coefficient", type=float, default=0.005, help="Coefficient for adversarial loss")
-parser.add_argument("--dis_perceptual_loss_coefficient", type=float, default=1, help="Coefficient for perceptual loss from discriminator")
-parser.add_argument("--coverage_coefficient", type=float, default=0.999, help="Mixing ratio / effective horizon")
-# parser.add_argument("--dataset", default="DIV2K, Flickr2K", help="Enter Dataset, Default: [DIV2K], Options = ['DIV2K', 'Flickr2K', 'Set5', 'Set14', 'BSD100', 'Sun-Hays80', 'Urban100']")
-
-def hard_update(target, source):
-    for target_param, param in zip(target.parameters(), source.parameters()):
-        target_param.data.copy_(param.data)
-
-def soft_update(target, source, tau):
-    for target_param, param in zip(target.parameters(), source.parameters()):
-        target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+parser.add_argument("--preservation_loss_coefficient", type=float, default=0.1, help="Coefficient for preservation loss")
+parser.add_argument("--inner_loop_steps", type=int, default=5, help="number of steps to be taken in the inner loop")
+parser.add_argument("--lr_inner", type=float, default=1e-4, help="Learning Rate. Default=1e-4")
+parser.add_argument("--lr_outer", type=float, default=1e-4, help="Learning Rate. Default=1e-4")
 
 def main():
 
-    #changed
-    # global opt, model, netContent
-
-    global opt, model_G, model_D, target_model_D, netContent, writer, STEPS
+    global opt, model_G, model_D, netContent, writer, STEPS
 
     opt = parser.parse_args()
-    if opt.mse_major:
-        opt.mse_loss_coefficient = 1
-        opt.dis_perceptual_loss_coefficient = 0.01
-    opt.huber_loss = True
     options = option.parse(opt.options)
     print(opt)
-    # print(options)
-    
-    if opt.dis_perceptual_loss:
-        assert opt.adversarial_loss, "Discriminator perceptual loss is invalid without adversarial loss"
-    
-    if opt.softmax_loss:
-        assert opt.dis_perceptual_loss, "Softmax normalization is only valid for Discriminator Perceptual loss"
 
-    if opt.target_net_flag:
-        assert opt.dis_perceptual_loss, "Target network is only valid for Discriminator Perceptual loss"
-
-    if opt.target_net_flag:
-    	exp_name = "True_"+str(opt.target_TAU)
-    else:
-    	exp_name = "False"
-    out_folder = "Target({})_mseMajor({})_Softmax({})_PerLoss({})_GANloss({})_VGGloss({})_coverage({})_huber({})_perCoeff({})".format(exp_name, opt.mse_major, opt.softmax_loss, opt.dis_perceptual_loss, opt.adversarial_loss, opt.vgg_loss, opt.coverage, opt.huber_loss, opt.dis_perceptual_loss_coefficient)
+    out_folder = "steps({})_lrIN({})_lrOUT({})_lambda(mseIN={},mseOUT={},vgg={},adv={},preserve={})".format(
+    	opt.inner_loop_steps, opt.lr_inner, opt.lr_outer, opt.mse_loss_coefficient_inner, opt.mse_loss_coefficient_outer,
+    	opt.vgg_loss_coefficient, opt.adversarial_loss_coefficient, opt.preservation_loss_coefficient)
 
     writer = SummaryWriter(logdir = os.path.join(opt.logs_dir, out_folder), comment="-srgan-")
 
     opt.sample_dir = os.path.join(opt.sample_dir, out_folder)
+    opt.fine_sample_dir = os.path.join(opt.fine_sample_dir, out_folder)
 
-    opt.checkpoint_file = os.path.join(opt.checkpoint_dir, out_folder)
+    opt.checkpoint_file_init = os.path.join(opt.checkpoint_dir, "init/"+out_folder)
+    opt.checkpoint_file_final = os.path.join(opt.checkpoint_dir, "final/"+out_folder)
+    opt.checkpoint_file_fine = os.path.join(opt.fine_checkpoint_dir, out_folder)
 
-
-    cuda = opt.cuda
-    if cuda:
-        print("=> use gpu id: '{}'".format(opt.gpus))
-        os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpus
-        if not torch.cuda.is_available():
-                raise Exception("No GPU found or Wrong gpu id, please run without --cuda")
+    os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpus
+    if not torch.cuda.is_available():
+            raise Exception("No GPU found or Wrong gpu id, please run without --cuda")
 
     opt.seed = random.randint(1, 10000)
     print("Random Seed: ", opt.seed)
     torch.manual_seed(opt.seed)
-    if cuda:
-        torch.cuda.manual_seed(opt.seed)
+    torch.cuda.manual_seed(opt.seed)
 
     cudnn.benchmark = True
 
     print("===> Loading datasets")
-    # train_set = DatasetFromHdf5("data/srresnet_x4.h5")
-    # training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, \
-    #     batch_size=opt.batchSize, shuffle=True)
-
     dataset_opt = options['datasets']['train']
     dataset_opt['batch_size'] = opt.batchSize
     print(dataset_opt)
@@ -136,15 +98,14 @@ def main():
     training_data_loader = create_dataloader(train_set, dataset_opt)
     print('===> Train Dataset: %s   Number of images: [%d]' % (train_set.name(), len(train_set)))
     if training_data_loader is None: raise ValueError("[Error] The training data does not exist")
-        
 
     print('===> Loading VGG model')
     netVGG = models.vgg19()
-    if opt.vgg_loss:
-        if os.path.isfile('data/vgg19-dcbb9e9d.pth'):
-        	netVGG.load_state_dict(torch.load('data/vgg19-dcbb9e9d.pth'))
-        else:
-        	netVGG.load_state_dict(model_zoo.load_url('https://download.pytorch.org/models/vgg19-dcbb9e9d.pth'))
+    if os.path.isfile('data/vgg19-dcbb9e9d.pth'):
+    	netVGG.load_state_dict(torch.load('data/vgg19-dcbb9e9d.pth'))
+    else:
+    	netVGG.load_state_dict(model_zoo.load_url('https://download.pytorch.org/models/vgg19-dcbb9e9d.pth'))
+
     class _content_model(nn.Module):
         def __init__(self):
             super(_content_model, self).__init__()
@@ -154,72 +115,25 @@ def main():
             out = self.feature(x)
             return out
 
-    netContent = _content_model()
-
-    print("===> Building model")
-    # changed
-    # Building generator and discriminator
-    model_G = _NetG(opt)
-    
-    #changed
-    if opt.adversarial_loss:
-        model_D = _NetD()
-        target_model_D = None
-        if opt.target_net_flag:
-            target_model_D = _NetD()
-            hard_update(target_model_D, model_D)
-        criterion_D = nn.BCELoss()
-    else:
-        model_D = None
-        target_model_D = None
-        criterion_D = None
-
-    criterion_G = GeneratorLoss(netContent, writer, STEPS)
-
-    print("===> Setting GPU")
-    if cuda:
-        #changed
-        model_G = model_G.cuda()
-
-        if opt.adversarial_loss:    
-            model_D = model_D.cuda()
-            if opt.target_net_flag:
-                target_model_D = target_model_D.cuda()
-            criterion_D = criterion_D.cuda()
-
-        criterion_G = criterion_G.cuda()
-        if opt.vgg_loss:
-            netContent = netContent.cuda()
-
-    # optionally resume from a checkpoint
-    if opt.resume:
-        if os.path.isfile(opt.resume):
-            print("=> loading checkpoint '{}'".format(opt.resume))
-            checkpoint = torch.load(opt.resume)
-            opt.start_epoch = checkpoint["epoch"] + 1
-            # changed
-            model_G.load_state_dict(checkpoint["model"].state_dict())
-        else:
-            print("=> no checkpoint found at '{}'".format(opt.resume))
+    G_init = _NetG(opt).cuda()
+    model_D = _NetD().cuda()
+    netContent = _content_model().cuda()
+    criterion_G = GeneratorLoss(netContent, writer, STEPS).cuda()
+    criterion_D = nn.BCELoss().cuda()
 
     # optionally copy weights from a checkpoint
     if opt.pretrained:
-        if os.path.isfile(opt.pretrained):
-            print("=> loading model '{}'".format(opt.pretrained))
-            weights = torch.load(opt.pretrained)
-            # changed
-            model_G.load_state_dict(weights['model'].state_dict())
-        else:
-            print("=> no model found at '{}'".format(opt.pretrained))
+        assert os.path.isfile(opt.pretrained)
+        print("=> loading model '{}'".format(opt.pretrained))
+        weights = torch.load(opt.pretrained)
+        # changed
+        G_init.load_state_dict(weights['model'].state_dict())
+
 
     print("===> Setting Optimizer")
     # changed
-    optimizer_G = optim.Adam(model_G.parameters(), lr=opt.lr)
-
-    if opt.adversarial_loss:       
-        optimizer_D = optim.Adam(model_D.parameters(), lr=opt.lr)
-    else:
-        optimizer_D = None
+    optimizer_G_outer = optim.Adam(G_init.parameters(), lr=opt.lr_outer)
+    optimizer_D = optim.Adam(model_D.parameters(), lr=opt.lr_disc)
 
     print("===> Pre-fetching validation data for monitoring training")
     test_dump_file = 'data/dump/Test5.pickle'
@@ -235,147 +149,215 @@ def main():
         print("===>Creating Checkpoint Test images")
 
     print("===> Training")
-    #to track loss type
-    opt.losstype_print_tracker = True
-    for epoch in range(opt.start_epoch, opt.nEpochs + 1):
-        # changed
-        train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch, STEPS)
-        save_checkpoint(images_hr, images_lr, model_G, epoch)
-
-def adjust_learning_rate(optimizer, epoch):
-    """Sets the learning rate to the initial LR decayed by 10"""
-    # lr = opt.lr * (0.5 ** (STEPS // opt.step))
+    epoch = opt.start_epoch
+    try:
+        while STEPS < (opt.inner_loop_steps+1)*opt.max_updates:
+            # changed
+            last_model_G = train(training_data_loader, optimizer_G_outer, optimizer_D, G_init, model_D, criterion_G, criterion_D, epoch, STEPS, writer)
+            assert last_model_G is not None
+            save_checkpoint(images_hr, images_lr, G_init, last_model_G, epoch)
+            epoch += 1
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt HANDLED! Running the final epoch on G_init")
+    epoch += 1
     if STEPS < 5e4:
-        return opt.lr
+        lr_finetune = opt.lr_inner
     elif STEPS < 1e5:
-        return opt.lr/2
+        lr_finetune = opt.lr_inner/2
     elif STEPS < 2e5:
-        return opt.lr/4
-    elif STEPS < 3e5:
-        return opt.lr/8
-    elif STEPS < 45e4:
-        return opt.lr/16
+        lr_finetune = opt.lr_inner/4
+    elif STEPS < 4e5:
+        lr_finetune =  opt.lr_inner/8
+    elif STEPS < 8e5:
+        lr_finetune = opt.lr_inner/16
     else:
-        return opt.lr/32 * (0.5 ** ((STEPS-45e4) // opt.step))
+        lr_finetune = opt.lr_inner/32
 
-def train(training_data_loader, optimizer_G, optimizer_D, model_G, model_D, target_model_D, criterion_G, criterion_D, epoch, STEPS):
-
-    lr = adjust_learning_rate(optimizer_G, epoch-1)
-    
-    for param_group in optimizer_G.param_groups:
-        param_group["lr"] = lr
-    
-    if opt.adversarial_loss:
-        for param_group in optimizer_D.param_groups:
-            param_group["lr"] = lr
-
-    print("Epoch={}, lr={}".format(epoch, optimizer_G.param_groups[0]["lr"]))
+    model_G = deepcopy(G_init)
+    optimizer_G_inner = optim.Adam(model_G.parameters(), lr=lr_finetune)
     model_G.train()
+    optimizer_G_inner.zero_grad()
+    init_parameters = torch.cat([p.view(-1) for k, p in G_init.named_parameters() if p.requires_grad])
 
-    if opt.adversarial_loss:
-        model_D.train()
+    opt.adversarial_loss = False
+    opt.vgg_loss = True
+    opt.mse_loss_coefficient = opt.mse_loss_coefficient_inner
 
     start_time = dt.datetime.now()
+    total_num_examples = len(training_data_loader)
     for iteration, batch in enumerate(training_data_loader, 1):
         input, target = Variable(batch['LR']), Variable(batch['HR'], requires_grad=False)
-        input = input/255
-        target = target/255
-        
+        input = input.cuda()/255
+        target = target.cuda()/255
+        STEPS += 1
+        output = model_G(input)
+        fake_out = None
+        optimizer_G_inner.zero_grad()
+        loss_g_inner = criterion_G(fake_out, output, target, opt)
+        curr_parameters = torch.cat([p.view(-1) for k, p in model_G.named_parameters() if p.requires_grad])
+        preservation_loss = ((Variable(init_parameters).detach()-curr_parameters)**2).sum()
+        loss_g_inner += preservation_loss
+        loss_g_inner.backward()
+        optimizer_G_inner.step()
+        writer.add_scalar("Loss_G_finetune", loss_g_inner.item(), STEPS)
+        if iteration%5 == 0:
+            fine_sample_img = torch_utils.make_grid(torch.cat([output.detach().clone(), target], dim=0), padding=2, normalize=False)
+            if not os.path.exists(opt.fine_sample_dir):
+                os.makedirs(opt.fine_sample_dir)
+            torch_utils.save_image(fine_sample_img, os.path.join(opt.fine_sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
 
-        STEPS += 1 # input.shape[0]
+            print("===> Finetuning Epoch[{}]({}/{}): G_Loss(finetune): {:.3}".format(epoch, iteration, total_num_examples,
+            	loss_g_inner.item(), (dt.datetime.now()-start_time).seconds))
+            start_time = dt.datetime.now()
+            save_checkpoint(images_hr, images_lr, None, model_G, iteration, finetune = True)
+    save_checkpoint(images_hr, images_lr, None, model_G, total_num_examples, finetune = True)
 
-        if opt.cuda:
-            input = input.cuda()
-            target = target.cuda()
+
+def train(training_data_loader, optimizer_G_outer, optimizer_D, G_init, model_D, criterion_G, criterion_D, epoch, STEPS, writer):
+
+    if STEPS < 5e4:
+        lr = opt.lr_inner
+    elif STEPS < 1e5:
+        lr = opt.lr_inner/2
+    elif STEPS < 2e5:
+        lr = opt.lr_inner/4
+    elif STEPS < 4e5:
+        lr =  opt.lr_inner/8
+    elif STEPS < 8e5:
+        lr = opt.lr_inner/16
+    else:
+        lr = opt.lr_inner/32
+
+    model_G = deepcopy(G_init)
+    optimizer_G_inner = optim.Adam(model_G.parameters(), lr=lr)
+    G_init.train()
+    model_G.train()
+    model_D.train()
+    optimizer_G_inner.zero_grad()
+    optimizer_G_outer.zero_grad()
+    optimizer_D.zero_grad()
+    init_parameters = torch.cat([p.view(-1) for k, p in G_init.named_parameters() if p.requires_grad])
+
+    start_time = dt.datetime.now()
+    total_num_examples = len(training_data_loader)
+    for iteration, batch in enumerate(training_data_loader, 1):
+        input, target = Variable(batch['LR']), Variable(batch['HR'], requires_grad=False)
+        input = input.cuda()/255
+        target = target.cuda()/255
+        STEPS += 1
+
+        opt.adversarial_loss = False
+        opt.vgg_loss = True
+        opt.mse_loss_coefficient = opt.mse_loss_coefficient_inner
+
 
         output = model_G(input)
-        
-        target_real = Variable(torch.rand(input.size()[0])*0.5 + 0.7).cuda()
-        target_fake = Variable(torch.rand(input.size()[0])*0.3).cuda()
-
-        target_disc = None
-        out_disc = None
-
-        if opt.adversarial_loss:
+        if iteration%(opt.inner_loop_steps+1) == 0:
             model_D.zero_grad()
-            target_disc = model_D(target)
-            out_disc = model_D(output)
-            real_out = target_disc[-1]
-            fake_out = out_disc[-1]
+            real_out = model_D(target)
+            fake_out = model_D(output)
+            target_real = Variable(torch.rand(input.size()[0])*0.5 + 0.7).cuda()
+            target_fake = Variable(torch.rand(input.size()[0])*0.3).cuda()
             loss_d = criterion_D(real_out, target_real) + criterion_D(fake_out, target_fake)
             loss_d.backward(retain_graph=True)
             optimizer_D.step()
         else:
             fake_out = None
 
-        if opt.target_net_flag:
-            target_model_D.eval()
-            target_disc = target_model_D(target)
-            out_disc = target_model_D(output)
-            soft_update(target_model_D, model_D, opt.target_TAU)
-            # if STEPS%opt.target_frequency == 0:
-            #     hard_update(target_model_D, model_D)
+        optimizer_G_inner.zero_grad()
+        loss_g_inner = criterion_G(fake_out, output, target, opt)
+        curr_parameters = torch.cat([p.view(-1) for k, p in model_G.named_parameters() if p.requires_grad])
+        preservation_loss = ((Variable(init_parameters).detach()-curr_parameters)**2).sum()
+        loss_g_inner += preservation_loss
+        loss_g_inner.backward(retain_graph=True)
+        if iteration%(opt.inner_loop_steps+1) == 0:
+            inner_grads = []
+            for model_param in model_G.parameters():
+                inner_grads.append(model_param.grad.view(-1))
+            inner_grads = torch.cat(inner_grads)
+            optimizer_G_inner.zero_grad()
+            # ----------------------------------------------------------------------------------------------------------
+            opt.adversarial_loss = True
+            opt.vgg_loss = False
+            opt.mse_loss_coefficient = opt.mse_loss_coefficient_outer
+            output_new = model_G(input)
+            loss_g_outer = criterion_G(fake_out, output_new, target, opt)
+            loss_g_outer.backward()
+            outer_grads = []
+            for param in model_G.parameters():
+                outer_grads.append(param.grad.view(-1))
+            outer_grads = torch.cat(outer_grads)
+            optimizer_G_inner.zero_grad()
+            # ----------------------------------------------------------------------------------------------------------
+            implicit_grad = conjugate_gradients(Fvp, inner_grads, outer_grads, model_G, optimizer_G_inner, 50, meta_lambda=opt.preservation_loss_coefficient, cuda = True)
+            optimizer_G_inner.zero_grad()
+            optimizer_G_outer.zero_grad()
+            prev_ind = 0
+            for param in G_init.parameters():
+                flat_size = int(np.prod(list(param.size())))
+                param.grad = implicit_grad[prev_ind:prev_ind + flat_size].view(param.size())
+                prev_ind += flat_size
+            optimizer_G_outer.step()
+        else:
+            optimizer_G_inner.step()
 
-
-        # if opt.vgg_loss:
-        #     content_input = netContent(output)
-        #     content_target = netContent(target)
-        #     content_target = content_target.detach()
-        #     content_loss = criterion(content_input, content_target)
-
-        optimizer_G.zero_grad()
-        loss_g = criterion_G(target_disc, out_disc, fake_out, output, target, opt)
-
-        # if opt.vgg_loss:
-        #     netContent.zero_grad()
-        #     content_loss.backward(retain_graph=True)
-
-        loss_g.backward()
-
-        optimizer_G.step()
-
-        writer.add_scalar("Loss_G", loss_g.item(), STEPS)
-
-        if opt.adversarial_loss:            
+        writer.add_scalar("Loss_G_inner", loss_g_inner.item(), STEPS)
+        if iteration%(opt.inner_loop_steps+1) == 0:
+            writer.add_scalar("Loss_G_outer", loss_g_outer.item(), STEPS)
             writer.add_scalar("Loss_D", loss_d.item(), STEPS)
+            if iteration >= total_num_examples-opt.inner_loop_steps:
+                sample_img = torch_utils.make_grid(torch.cat([output.detach().clone(), target], dim=0), padding=2, normalize=False)
+                if not os.path.exists(opt.sample_dir):
+                    os.makedirs(opt.sample_dir)            
+                torch_utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
 
-        if iteration%500 == 0:
-            # if opt.vgg_loss:
-            #     print("===> Epoch[{}]({}/{}): Loss: {:.5} Content_loss {:.5}".format(epoch, iteration, len(training_data_loader), loss.data[0], content_loss.data[0]))
-            # else:
-            
-            sample_img = torch_utils.make_grid(torch.cat([output.detach().clone(), target], dim=0), padding=2, normalize=False)
-            if not os.path.exists(opt.sample_dir):
-                os.makedirs(opt.sample_dir)
-            
-            torch_utils.save_image(sample_img, os.path.join(opt.sample_dir, "Epoch-{}--Iteration-{}.png".format(epoch, iteration)), padding=5)
-
-        if iteration%100 == 0:
-            if opt.adversarial_loss:
-                print("===> Epoch[{}]({}/{}): G_Loss: {:.3}, D_Loss: {:.3}, Time: {} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), loss_d.item(), (dt.datetime.now()-start_time).seconds))
-            else:
-                print("===> Epoch[{}]({}/{}): Loss: {:.3}, Time: {} ".format(epoch, iteration, len(training_data_loader), loss_g.item(), (dt.datetime.now()-start_time).seconds))
+        if iteration%(opt.inner_loop_steps+1) == 0: # and (iteration//(opt.inner_loop_steps+1))%(100//(opt.inner_loop_steps+1)) == 0:
+            print("===> Epoch[{}]({}/{}): G_Loss: {:.3} (inner)/ {:.3} (outer), D_Loss: {:.3}, Time: {} ".format(epoch, iteration, total_num_examples,
+            	loss_g_inner.item(), loss_g_outer.item(), loss_d.item(), (dt.datetime.now()-start_time).seconds))
             start_time = dt.datetime.now()
+            if iteration >= total_num_examples-opt.inner_loop_steps:
+                return model_G
+            else:
+                model_G = deepcopy(G_init)
+                optimizer_G_inner = optim.Adam(model_G.parameters(), lr=lr)
+                optimizer_G_inner.zero_grad()
+                optimizer_G_outer.zero_grad()
+                optimizer_D.zero_grad()
+                init_parameters = torch.cat([p.view(-1) for k, p in G_init.named_parameters() if p.requires_grad])
 
-def save_checkpoint(images_hr, images_lr, model, epoch):        
+def save_checkpoint(images_hr, images_lr, model_init, model_k_steps, epoch, finetune = False):        
 
-    psnr_test, _, vif_test, _ = eval_metrics(images_hr, images_lr, model, scale_factor=4, cuda=True, show_bicubic=False, save_images=False)
+    psnr_test, _, vif_test, _ = eval_metrics(images_hr, images_lr, model_k_steps, scale_factor=4, cuda=True, show_bicubic=False, save_images=False)
 
     global BEST_PSNR, BEST_VIF
     
-    writer.add_scalar("PSNR", psnr_test, epoch)
-    writer.add_scalar("VIF", vif_test, epoch)
+    if not finetune:
+        writer.add_scalar("PSNR", psnr_test, epoch)
+        writer.add_scalar("VIF", vif_test, epoch)
 
+    frequency = opt.epoch_finetune_frequency if finetune else opt.epoch_frequency
+    if psnr_test > BEST_PSNR or vif_test > BEST_VIF or epoch%frequency==0:
+        if not finetune:
+            model_out_path_init = os.path.join(opt.checkpoint_file_init,  "model_epoch_{}_PSNR_{}_VIF_{}.pth".format(epoch, psnr_test, vif_test))
+            state_init = {"epoch": epoch ,"model": model_init}
+            if not os.path.exists(opt.checkpoint_file_init):
+                os.makedirs(opt.checkpoint_file_init)
+            state_init = {"epoch": epoch ,"model": model_init}
+            torch.save(state_init, model_out_path_init)
 
-    if psnr_test > BEST_PSNR or vif_test > BEST_VIF or epoch%10==0:
-        model_out_path = os.path.join(opt.checkpoint_file,  "model_epoch_{}_PSNR_{}_VIF_{}.pth".format(epoch, psnr_test, vif_test))
-        state = {"epoch": epoch ,"model": model}
-        if not os.path.exists(opt.checkpoint_file):
-            os.makedirs(opt.checkpoint_file)
+            model_out_path_final = os.path.join(opt.checkpoint_file_final,  "model_epoch_{}_PSNR_{}_VIF_{}.pth".format(epoch, psnr_test, vif_test))
+            if not os.path.exists(opt.checkpoint_file_final):
+                os.makedirs(opt.checkpoint_file_final)
+            state_final = {"epoch": epoch ,"model": model_k_steps}
+        else:
+            model_out_path_final = os.path.join(opt.checkpoint_file_fine,  "model_iteration_{}_PSNR_{}_VIF_{}.pth".format(epoch, psnr_test, vif_test))
+            if not os.path.exists(opt.checkpoint_file_fine):
+                os.makedirs(opt.checkpoint_file_fine)
+            model_out_path_init = "<NiL>"
+            state_final = {"iteration": epoch ,"model": model_k_steps}
+        torch.save(state_final, model_out_path_final)
 
-        torch.save(state, model_out_path)
-
-        print("Checkpoint saved to {}".format(model_out_path))
+        print("Checkpoint saved to {}, {}".format(model_out_path_init, model_out_path_final))
 
         if psnr_test > BEST_PSNR:            
             print("PSNR updated {} ====> {}".format(BEST_PSNR, psnr_test))

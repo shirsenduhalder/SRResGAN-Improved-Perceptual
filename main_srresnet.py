@@ -50,7 +50,7 @@ parser.add_argument("--epoch_finetune_frequency", type=int, default=10, help="NA
 parser.add_argument("--CG_steps", type=int, default=20, help="Number of CG steps to compute the meta-gradient")
 #coefficient
 parser.add_argument("--mse_loss_coefficient_inner", type=float, default=0.01, help="Coefficient for MSE Loss in the inner loop")
-parser.add_argument("--mse_loss_coefficient_outer", type=float, default=0.01, help="Coefficient for MSE Loss in the outer loop")
+parser.add_argument("--mse_loss_coefficient_outer", type=float, default=1, help="Coefficient for MSE Loss in the outer loop")
 parser.add_argument("--vgg_loss_coefficient", type=float, default=0.5, help="Coefficient for VGG loss")
 parser.add_argument("--adversarial_loss_coefficient", type=float, default=0.005, help="Coefficient for adversarial loss")
 parser.add_argument("--preservation_loss_coefficient", type=float, default=0.1, help="Coefficient for preservation loss")
